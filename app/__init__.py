@@ -212,6 +212,7 @@ def create_app(config_class=Config):
 		with app.app_context():
 			db.create_all()
 			_ensure_default_users(app)
+			app.logger.info("Database bootstrap complete: tables and demo accounts verified.")
 	except Exception:
 		app.logger.exception("Default account bootstrap failed.")
 

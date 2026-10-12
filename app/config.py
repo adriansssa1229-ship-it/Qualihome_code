@@ -76,9 +76,10 @@ class Config:
         if resolved_ssl_ca:
             engine_options["connect_args"] = {"ssl": {"ca": resolved_ssl_ca}}
         else:
-            engine_options["connect_args"] = {
-                "ssl": {"check_hostname": False, "verify_mode": False}
-            }
+            # Railway internal private network (mysql.railway.internal) uses an isolated
+            # container network and does not require TLS. Disabling client SSL avoids
+            # self-signed certificate verification failures.
+            engine_options["connect_args"] = {"ssl_disabled": True}
 
         SQLALCHEMY_ENGINE_OPTIONS = engine_options
 

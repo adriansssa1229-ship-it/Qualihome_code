@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block title %}Verify Email — QUALIHOME{% endblock %}
+
+{% block content %}
+<section class="gq-page">
+  <div class="container-xl">
+    <div class="gq-layout gq-layout--split">
+
+      <!-- ── LEFT — Brand Panel ─────────────────────────────── -->
+      <aside class="gq-sidebar">
+        <div class="auth-split-left-inner">
+
+          <!-- Headline -->
+          <h2 class="auth-split-headline mb-2">
+            Secure &amp; Verified<br>
+            <span class="auth-headline-accent">Home Buyer</span><br>
+            Protection
+          </h2>
+          <p class="auth-split-sub mb-3">
+            Email verification ensures that your real estate inquiries, financial assessments, and document submissions stay authentic and protected.
+          </p>
+
+          <!-- Feature bullets -->
+          <ul class="auth-feature-list mb-3">
+            <li>
+              <span class="auth-feat-icon"><i class="fas fa-shield-alt"></i></span>
+              <div class="auth-feat-text">
+                <strong>Identity &amp; Account Protection</strong>
+                <span>Guarantees only you can access your pre-qualification results</span>
+              </div>
+            </li>
+            <li>
+              <span class="auth-feat-icon"><i class="fas fa-envelope-circle-check"></i></span>
+              <div class="auth-feat-text">
+                <strong>Official Notifications</strong>
+                <span>Receive verified updates from Annregar Realty agents directly</span>
+              </div>
+            </li>
+            <li>
+              <span class="auth-feat-icon"><i class="fas fa-lock"></i></span>
+              <div class="auth-feat-text">
+                <strong>Anti-Spam &amp; Secure Cloud</strong>
+                <span>Prevents unauthorized account creation and protects your data</span>
+              </div>
+            </li>
+          </ul>
+
+          <!-- Help info box -->
+          <div class="p-3 mt-4" style="background:rgba(255,255,255,.08); border-radius:10px; border:1px solid rgba(255,255,255,.15); color:#fff; font-size:.85rem;">
+            <i class="fas fa-info-circle me-1" style="color:var(--clr-accent);"></i>
+            <strong>Tip:</strong> If the email isn't in your inbox within 1-2 minutes, please check your <strong>Spam</strong> or <strong>Promotions</strong> folder.
+          </div>
+
+        </div>
+      </aside>
+
+      <!-- ── RIGHT — Form Panel ─────────────────────────────── -->
+      <div class="auth-login-content">
+        <div class="auth-split-form-wrap">
+
+          <!-- Card header -->
+          <div class="auth-form-card-header text-center">
+            <div class="text-center mb-3">
+              <img src="{{ url_for('static', filename='img/essentials/logo.png') }}" alt="QUALIHOME" class="auth-form-logo">
+            </div>
+            <div class="mb-2">
+              <span class="d-inline-flex align-items-center justify-content-center" style="width:58px;height:58px;border-radius:50%;background:rgba(26,38,153,.08);color:var(--clr-blue);font-size:1.6rem;">
+                <i class="fas fa-envelope-open-text"></i>
+              </span>
+            </div>
+            <h4 class="auth-form-title mb-1">Verify Your Email</h4>
+            <p class="auth-form-subtitle">
+              We sent a 6-digit verification code to<br>
+              <strong class="text-dark">{{ email }}</strong>
+            </p>
+          </div>
+
+          <form method="POST" action="{{ url_for('auth.verify_otp') }}" id="otpForm" novalidate>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <!-- OTP Input -->
+            <div class="mb-4">
+              <label for="otpInput" class="sqh-form-label text-center d-block mb-2">
+                <i class="fas fa-key me-1 text-crimson"></i> Enter 6-Digit Code
+              </label>
+              <div class="d-flex justify-content-center">
+                <input type="text"
+                       name="otp"
+                       id="otpInput"
+                       maxlength="6"
+                       pattern="[0-9]{6}"
+                       inputmode="numeric"
+                       class="form-control form-control-lg text-center fw-bold"
+                       placeholder="••••••"
+                       required
+                       autofocus
+                       autocomplete="one-time-code"
+                       style="max-width:280px; font-size:2.2rem; letter-spacing:14px; font-family:'Courier New', monospace; border:2px solid var(--clr-primary); border-radius:12px; background:#fbfcfe; padding-left:22px;">
+              </div>
+              <div class="text-center text-muted small mt-2">
+                <i class="fas fa-stopwatch me-1"></i> Code expires in <strong>15 minutes</strong>
+              </div>
+            </div>
+
+            <!-- Submit button -->
+            <button type="submit" class="btn btn-lime-auth w-100 mb-3" id="verifyBtn">
+              <i class="fas fa-check-circle me-1"></i> Verify &amp; Activate Account
+            </button>
+
+            <!-- Resend Box -->
+            <div class="text-center p-3 mb-4" style="background:rgba(26,38,153,.04); border-radius:10px; border:1px solid rgba(26,38,153,.1);">
+              <span class="text-muted small">Didn't receive the email? </span>
+              <button type="button" class="btn btn-link text-crimson p-0 fw-bold small text-decoration-none" id="resendOtpBtn">
+                <i class="fas fa-paper-plane me-1"></i>Resend Code
+              </button>
+              <span id="resendTimerSpan" class="small text-muted ms-2 d-none">
+                (Wait <span id="resendCountdown" class="fw-bold text-dark">60</span>s)
+              </span>
+              <div id="resendStatus" class="small mt-2" style="display:none;"></div>
+            </div>
+
+            <!-- Back / Cancel link -->
+            <div class="text-center">
+              <a href="{{ url_for('auth.cancel_verification') }}" class="small text-muted text-decoration-none">
+                <i class="fas fa-arrow-left me-1"></i> Wrong email? Back to Sign In
+              </a>
+            </div>
+
+          </form>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var otpInput = document.getElementById('otpInput');
+  var resendBtn = document.getElementById('resendOtpBtn');
+  var timerSpan = document.getElementById('resendTimerSpan');
+  var countdownEl = document.getElementById('resendCountdown');
+  var statusDiv = document.getElementById('resendStatus');
+  var csrfToken = "{{ csrf_token() }}";
+
+  // Force numeric only and auto-advance
+  if (otpInput) {
+    otpInput.focus();
+    otpInput.addEventListener('input', function () {
+      this.value = this.value.replace(/\D/g, '').slice(0, 6);
+      if (this.value.length === 6) {
+        // Auto submit when 6 digits are typed
+        var form = document.getElementById('otpForm');
+        var verifyBtn = document.getElementById('verifyBtn');
+        if (verifyBtn) {
+          verifyBtn.disabled = true;
+          verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Verifying...';
+        }
+        form.submit();
+      }
+    });
+  }
+
+  // Resend Countdown Timer handler
+  var timerInterval = null;
+  function startCooldown(seconds) {
+    var rem = seconds;
+    resendBtn.disabled = true;
+    resendBtn.classList.add('opacity-50');
+    timerSpan.classList.remove('d-none');
+    countdownEl.textContent = rem;
+
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(function () {
+      rem--;
+      countdownEl.textContent = rem;
+      if (rem <= 0) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        resendBtn.disabled = false;
+        resendBtn.classList.remove('opacity-50');
+        timerSpan.classList.add('d-none');
+      }
+    }, 1000);
+  }
+
+  // Handle Resend button click
+  if (resendBtn) {
+    resendBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (resendBtn.disabled) return;
+
+      resendBtn.disabled = true;
+      var origHTML = resendBtn.innerHTML;
+      resendBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Sending...';
+      statusDiv.style.display = 'none';
+      statusDiv.className = 'small mt-2';
+
+      fetch("{{ url_for('auth.resend_otp') }}", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        }
+      })
+      .then(function (res) { return res.json().then(function (d) { return { status: res.status, data: d }; }); })
+      .then(function (resp) {
+        resendBtn.innerHTML = origHTML;
+        if (resp.data.ok) {
+          statusDiv.className = 'small mt-2 text-success fw-bold';
+          statusDiv.innerHTML = '<i class="fas fa-check-circle me-1"></i> ' + resp.data.message;
+          statusDiv.style.display = 'block';
+          startCooldown(60);
+          if (otpInput) {
+            otpInput.value = '';
+            otpInput.focus();
+          }
+        } else {
+          statusDiv.className = 'small mt-2 text-danger fw-bold';
+          statusDiv.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i> ' + (resp.data.error || 'Failed to resend code.');
+          statusDiv.style.display = 'block';
+          if (resp.status === 429) {
+            startCooldown(30);
+          } else {
+            resendBtn.disabled = false;
+          }
+        }
+      })
+      .catch(function () {
+        resendBtn.innerHTML = origHTML;
+        resendBtn.disabled = false;
+        statusDiv.className = 'small mt-2 text-danger fw-bold';
+        statusDiv.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i> Connection error. Please try again.';
+        statusDiv.style.display = 'block';
+      });
+    });
+  }
+});
+</script>
+{% endblock %}

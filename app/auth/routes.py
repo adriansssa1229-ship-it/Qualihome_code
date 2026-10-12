@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import os
+import secrets
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -132,6 +133,123 @@ def _send_reset_email(to_email: str, reset_url: str) -> tuple[bool, str | None]:
         return False, str(exc)
 
 
+def _is_email_verification_enabled() -> bool:
+    """Returns True if admin requires OTP email verification on registration."""
+    try:
+        cfg = SystemConfig.query.filter_by(key="email_verification_enabled").first()
+        if cfg and cfg.value is not None:
+            return cfg.value.strip().lower() in {"true", "1", "yes"}
+    except Exception:
+        pass
+    return True
+
+
+def _send_otp_email(to_email: str, otp_code: str, first_name: str = "") -> tuple[bool, str | None]:
+    """Sends a 6-digit verification code to the client via configured Gmail SMTP."""
+    cfg = current_app.config
+    server = (cfg.get("MAIL_SERVER") or "").strip()
+    username = (cfg.get("MAIL_USERNAME") or "").strip()
+    password = cfg.get("MAIL_PASSWORD") or ""
+    from_addr = (cfg.get("MAIL_FROM") or username or "no-reply@qualihome.local").strip()
+    if not server or not username or not password:
+        return False, "Missing SMTP configuration (server/username/password)."
+
+    subject = f"QUALIHOME Verification Code: {otp_code}"
+    display_name = first_name.strip() if first_name else "Future Homeowner"
+
+    text_body = (
+        f"Hello {display_name},\n\n"
+        f"Thank you for registering with QUALIHOME.\n\n"
+        f"Your 6-digit email verification code is: {otp_code}\n\n"
+        f"This code is valid for 15 minutes. Please do not share this code with anyone.\n\n"
+        f"If you did not create an account on QUALIHOME, you can ignore this email.\n\n"
+        f"— Annregar Realty & QUALIHOME Team"
+    )
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #f7f9fc; margin: 0; padding: 20px; }}
+    .container {{ max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }}
+    .header {{ background: #1a2699; padding: 24px 20px; text-align: center; }}
+    .header h1 {{ color: #ffffff; margin: 0; font-size: 24px; letter-spacing: 1px; font-weight: 800; }}
+    .header p {{ color: #aadd2a; margin: 5px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; }}
+    .content {{ padding: 30px 24px; color: #2d3748; line-height: 1.6; }}
+    .greeting {{ font-size: 18px; font-weight: 700; color: #1a202c; margin-bottom: 12px; }}
+    .otp-box {{ background: #f0f4ff; border: 2px dashed #1a2699; border-radius: 10px; padding: 20px; text-align: center; margin: 22px 0; }}
+    .otp-code {{ font-size: 36px; font-weight: 900; letter-spacing: 12px; color: #1a2699; font-family: monospace; }}
+    .otp-sub {{ font-size: 12px; color: #718096; margin-top: 8px; font-weight: 600; }}
+    .footer {{ background: #edf2f7; padding: 16px 20px; text-align: center; font-size: 12px; color: #718096; border-top: 1px solid #e2e8f0; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>QUALIHOME</h1>
+      <p>Annregar Realty &bull; Smart Qualification</p>
+    </div>
+    <div class="content">
+      <div class="greeting">Hello, {display_name}!</div>
+      <p>Thank you for signing up with QUALIHOME. To verify your email address and activate your pre-qualification dashboard, please enter the verification code below:</p>
+      <div class="otp-box">
+        <div class="otp-code">{otp_code}</div>
+        <div class="otp-sub">Valid for 15 minutes &bull; Single-use only</div>
+      </div>
+      <p style="font-size: 13px; color: #4a5568;">If you did not create an account on QUALIHOME, please disregard this email.</p>
+    </div>
+    <div class="footer">
+      &copy; 2026 QUALIHOME &bull; Annregar Realty. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>"""
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg.set_content(text_body)
+    msg.add_alternative(html_body, subtype="html")
+
+    port = int(cfg.get("MAIL_PORT", 587))
+    use_ssl = bool(cfg.get("MAIL_USE_SSL", False))
+    use_tls = bool(cfg.get("MAIL_USE_TLS", True))
+    try:
+        if use_ssl:
+            with smtplib.SMTP_SSL(server, port, context=ssl.create_default_context(), timeout=15) as smtp:
+                smtp.login(username, password)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(server, port, timeout=15) as smtp:
+                smtp.ehlo()
+                if use_tls:
+                    smtp.starttls(context=ssl.create_default_context())
+                    smtp.ehlo()
+                smtp.login(username, password)
+                smtp.send_message(msg)
+        return True, None
+    except Exception as exc:
+        current_app.logger.exception("Failed to send OTP verification email.")
+        return False, str(exc)
+
+
+def _ensure_active_otp(user: User) -> tuple[bool, str | None]:
+    """Ensures user has an unexpired OTP; generates and emails a new one if missing or expired."""
+    now = datetime.now(timezone.utc)
+    expiry = user.otp_expiry
+    if expiry and expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    if not user.otp_code or not expiry or now >= expiry:
+        otp = f"{secrets.randbelow(900000) + 100000:06d}"
+        user.otp_code = otp
+        user.otp_expiry = now + timedelta(minutes=15)
+        db.session.commit()
+        return _send_otp_email(user.email, otp, user.first_name)
+    return True, None
+
+
 def _compute_result(gross_income: float, monthly_debt: float,
                     employment_type: str = "employed",
                     tenure_months: int = 0, age: int = 30,
@@ -204,6 +322,12 @@ def login():
                 if not user.is_active:
                     flash("Your account has been deactivated. Please contact support.", "danger")
                     return redirect(url_for("auth.login"))
+                if _is_email_verification_enabled() and not getattr(user, "is_verified", True):
+                    _ensure_active_otp(user)
+                    session["pending_verify_user_id"] = user.id
+                    session["pending_verify_email"] = user.email
+                    flash("Please verify your email address to access your account. A 6-digit verification code has been sent to your Gmail.", "warning")
+                    return redirect(url_for("auth.verify_otp"))
                 session.pop(email_key, None)  # Clear failed-attempt counter on success
                 login_user(user, remember=form.remember.data)
                 try:
@@ -232,6 +356,12 @@ def register():
         return redirect(_dashboard_url(current_user.role))
 
     if request.method == "POST":
+        # Anti-bot honeypot check (catches automated scripts immediately)
+        if request.form.get("user_website_trap"):
+            current_app.logger.warning("Bot registration blocked via honeypot trap.")
+            flash("Account created! Please sign in to access your dashboard.", "success")
+            return redirect(url_for("auth.login"))
+
         # Strip thousands separators BEFORE WTForms binds request.form
         # (DecimalField.process_formdata runs before field `filters`).
         try:
@@ -260,17 +390,9 @@ def register():
     form.preferred_type.choices = [("", "Any model (optional)")] + [(name, name) for name in model_names]
     live_meter_cfg = _get_live_meter_criteria()
     if form.validate_on_submit():
-        valid_id_file = request.files.get("valid_id_file")
-        income_proof_file = request.files.get("income_proof_file")
-
-        try:
-            valid_id_doc = _read_registration_doc(valid_id_file)
-            income_proof_doc = _read_registration_doc(income_proof_file)
-        except ValueError as exc:
-            flash(str(exc), "danger")
-            return render_template("auth/register.html", form=form, live_meter_cfg=live_meter_cfg, title="Get Qualified")
 
         # 1. Create User
+        verification_enabled = _is_email_verification_enabled()
         user = User(
             first_name     = form.first_name.data.strip(),
             middle_name    = (form.middle_name.data or "").strip() or None,
@@ -279,7 +401,13 @@ def register():
             email          = form.email.data.lower().strip(),
             contact_number = form.contact_number.data.strip(),
             role           = "client",
+            is_verified    = not verification_enabled,
         )
+        if verification_enabled:
+            otp = f"{secrets.randbelow(900000) + 100000:06d}"
+            user.otp_code = otp
+            user.otp_expiry = datetime.now(timezone.utc) + timedelta(minutes=15)
+
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.flush()   # generates user.id before commit
@@ -307,12 +435,6 @@ def register():
             budget_max            = form.budget_max.data or Decimal("0"),
             has_valid_id          = (form.has_valid_id.data == "yes"),
             has_income_proof      = (form.has_income_proof.data == "yes"),
-            valid_id_data         = valid_id_doc["data"] if valid_id_doc else None,
-            valid_id_mimetype     = valid_id_doc["mimetype"] if valid_id_doc else None,
-            valid_id_filename     = valid_id_doc["filename"] if valid_id_doc else None,
-            income_proof_data     = income_proof_doc["data"] if income_proof_doc else None,
-            income_proof_mimetype = income_proof_doc["mimetype"] if income_proof_doc else None,
-            income_proof_filename = income_proof_doc["filename"] if income_proof_doc else None,
         )
         db.session.add(profile)
 
@@ -351,13 +473,25 @@ def register():
                      actor=user)
         db.session.commit()
 
-        # 6. Show result page (user must sign in manually)
-        flash(f"Account created! Sign in to access your dashboard, {user.first_name}.", "success")
-        return render_template("auth/register.html",
-                               result=result,
-                               user_name=user.first_name,
-                               live_meter_cfg=live_meter_cfg,
-                               title="Registration Complete")
+        if verification_enabled:
+            sent, mail_err = _send_otp_email(user.email, user.otp_code, user.first_name)
+            session["pending_verify_user_id"] = user.id
+            session["pending_verify_email"] = user.email
+            session["otp_sent_at"] = datetime.now(timezone.utc).timestamp()
+            if sent:
+                flash(f"A 6-digit verification code has been sent to {user.email}. Please enter it to activate your account.", "info")
+            else:
+                current_app.logger.warning("Failed to send OTP email to %s: %s", user.email, mail_err)
+                flash("Account created! If you do not see the email, click 'Resend Code'.", "warning")
+            return redirect(url_for("auth.verify_otp"))
+        else:
+            # 6. Show result page (user must sign in manually)
+            flash(f"Account created! Sign in to access your dashboard, {user.first_name}.", "success")
+            return render_template("auth/register.html",
+                                   result=result,
+                                   user_name=user.first_name,
+                                   live_meter_cfg=live_meter_cfg,
+                                   title="Registration Complete")
 
     return render_template("auth/register.html", form=form, live_meter_cfg=live_meter_cfg, title="Get Qualified")
 
@@ -379,6 +513,113 @@ def register_check_field():
         exists = User.query.filter_by(email=value.lower()).first() is not None
 
     return jsonify(ok=True, available=(not exists), exists=exists)
+
+
+# -- Email OTP Verification ----------------------------------------------------
+
+@auth_bp.route("/verify-otp", methods=["GET", "POST"])
+def verify_otp():
+    if current_user.is_authenticated and getattr(current_user, "is_verified", True):
+        return redirect(_dashboard_url(current_user.role))
+
+    user_id = session.get("pending_verify_user_id")
+    if not user_id:
+        flash("No pending verification session. Please sign in or register.", "info")
+        return redirect(url_for("auth.login"))
+
+    user = db.session.get(User, int(user_id))
+    if not user:
+        session.pop("pending_verify_user_id", None)
+        flash("User account not found. Please register again.", "danger")
+        return redirect(url_for("auth.login"))
+
+    if getattr(user, "is_verified", False):
+        session.pop("pending_verify_user_id", None)
+        session.pop("pending_verify_email", None)
+        flash("Your account is already verified! Please sign in.", "success")
+        return redirect(url_for("auth.login"))
+
+    if request.method == "POST":
+        entered = (request.form.get("otp") or "").strip()
+        now = datetime.now(timezone.utc)
+        expiry = user.otp_expiry
+        if expiry and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+
+        if not user.otp_code:
+            flash("No verification code found. Please click 'Resend Code'.", "warning")
+            return render_template("auth/verify_otp.html", email=user.email)
+
+        if expiry and now > expiry:
+            flash("Verification code has expired. Please click 'Resend Code' to receive a new one.", "danger")
+            return render_template("auth/verify_otp.html", email=user.email)
+
+        if entered != str(user.otp_code).strip():
+            flash("Invalid 6-digit verification code. Please check your Gmail and try again.", "danger")
+            return render_template("auth/verify_otp.html", email=user.email)
+
+        # Verification successful!
+        user.is_verified = True
+        user.otp_code = None
+        user.otp_expiry = None
+        try:
+            log_activity("email_verified", f"{user.email} verified account email.", actor=user)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+        session.pop("pending_verify_user_id", None)
+        session.pop("pending_verify_email", None)
+        session.pop("otp_sent_at", None)
+
+        login_user(user)
+        flash(f"Email verified successfully! Welcome to QUALIHOME, {user.first_name}!", "success")
+        return redirect(_dashboard_url(user.role))
+
+    return render_template("auth/verify_otp.html", email=user.email)
+
+
+@auth_bp.route("/resend-otp", methods=["POST"])
+def resend_otp():
+    user_id = session.get("pending_verify_user_id")
+    if not user_id:
+        return jsonify({"ok": False, "error": "No pending verification session. Please sign in."}), 400
+
+    user = db.session.get(User, int(user_id))
+    if not user:
+        return jsonify({"ok": False, "error": "User account not found."}), 404
+
+    if getattr(user, "is_verified", False):
+        return jsonify({"ok": False, "error": "Account is already verified. Please sign in."}), 400
+
+    now = datetime.now(timezone.utc)
+    now_ts = now.timestamp()
+    last_sent = float(session.get("otp_sent_at", 0))
+    if now_ts - last_sent < 60:
+        remaining = int(60 - (now_ts - last_sent))
+        return jsonify({"ok": False, "error": f"Please wait {remaining} seconds before requesting a new code."}), 429
+
+    otp = f"{secrets.randbelow(900000) + 100000:06d}"
+    user.otp_code = otp
+    user.otp_expiry = now + timedelta(minutes=15)
+    db.session.commit()
+
+    sent, mail_err = _send_otp_email(user.email, otp, user.first_name)
+    session["otp_sent_at"] = now_ts
+
+    if sent:
+        return jsonify({"ok": True, "message": "A new 6-digit verification code was sent to your Gmail."})
+    else:
+        return jsonify({"ok": False, "error": f"Could not send email: {mail_err}"}), 500
+
+
+@auth_bp.route("/cancel-verification")
+def cancel_verification():
+    session.pop("pending_verify_user_id", None)
+    session.pop("pending_verify_email", None)
+    session.pop("otp_sent_at", None)
+    flash("Verification cancelled. You can sign in or register with another email.", "info")
+    return redirect(url_for("auth.login"))
 
 
 # -- Logout -------------------------------------------------------------------

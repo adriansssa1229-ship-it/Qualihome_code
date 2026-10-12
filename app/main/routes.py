@@ -1,4 +1,4 @@
-﻿import os
+import os
 import uuid
 import re
 import json
@@ -364,7 +364,7 @@ def api_reference_ph_banks():
 def _get_live_meter_criteria() -> dict:
     """Fetch qualification criteria for client-side live DTI meter."""
     return {
-        "dti_qualified_max": _get_system_config_float("dti_qualified_max", 35.0),
+        "dti_qualified_max": _get_system_config_float("dti_qualified_max", 30.0),
         "dti_conditional_max": _get_system_config_float("dti_conditional_max", 42.0),
         "min_tenure_months": _get_system_config_int("min_tenure_months", 6),
         "stability_scores": {
@@ -504,7 +504,7 @@ def _resolve_pricing_inputs(overrides: dict | None = None, config_map: dict | No
         "loanable_percentage": _num("loanable_percentage", 80.0),
         "vat_rate": _num("vat_rate", 12.0),
         "lmf_rate": _num("lmf_rate", 10.0),
-        "annual_interest_rate": _num("annual_interest_rate", _cfg_float("pricing_annual_interest_rate", 8.5)),
+        "annual_interest_rate": _num("annual_interest_rate", _cfg_float("pricing_annual_interest_rate", 7.5)),
         "required_income_ratio": _num("required_income_ratio", _cfg_float("pricing_required_income_ratio", 30.0)),
     }
 
@@ -602,7 +602,7 @@ def _is_affordable_any_term(pricing: dict | None, client_income: float) -> bool:
     for at least one loan term (5/10/15/20 yrs).
 
     Uses per-term required_monthly_income vs client gross income with the
-    35/42 DTI threshold ratio (income >= req → Qualified;
+    30/42 DTI threshold ratio (income >= req → Qualified;
     income >= req * qualified/conditional → Conditionally Qualified).
     Missing pricing/income never hides a card (fail-open).
     """
@@ -620,15 +620,33 @@ def _is_affordable_any_term(pricing: dict | None, client_income: float) -> bool:
     if not req_vals:
         return True
     try:
-        qualified_max = _get_system_config_float("dti_qualified_max", 35.0)
+        qualified_max = _get_system_config_float("dti_qualified_max", 30.0)
         conditional_max = _get_system_config_float("dti_conditional_max", 42.0)
-        ratio = (qualified_max / conditional_max) if conditional_max > 0 else 0.8333
+        ratio = (qualified_max / conditional_max) if conditional_max > 0 else (30.0 / 42.0)
     except Exception:
-        ratio = 35.0 / 42.0
+        ratio = 30.0 / 42.0
     for req in req_vals:
         if client_income >= req or client_income >= req * ratio:
             return True
     return False
+
+
+def _is_qualified_5_year(pricing: dict | None, client_income: float) -> bool:
+    """True if client income is fully qualified for the 5-year loan term
+    (income >= required_monthly_income['5']).
+    Being fully qualified for 5 years guarantees qualification across
+    10, 15, and 20-year terms as well.
+    """
+    if not pricing or client_income <= 0:
+        return False
+    req_map = pricing.get("required_monthly_income") or {}
+    try:
+        req5 = float(req_map.get("5") or 0)
+    except (TypeError, ValueError):
+        req5 = 0.0
+    if req5 <= 0:
+        return False
+    return client_income >= req5
 
 
 @main_bp.route("/admin/property/pricing-preview", methods=["GET"])
@@ -663,7 +681,7 @@ def index():
     # One catalog load feeds everything below (filter dropdowns + card list);
     # the two former DISTINCT scans are derived in Python.
     all_catalog = (Property.query
-                   .filter_by(status="available")
+                   .filter(db.func.lower(Property.status) == "available")
                    .filter(db.or_(Property.approval_status == "approved",
                                   Property.approval_status.is_(None)))
                    .options(selectinload(Property.subdivision))
@@ -788,13 +806,13 @@ def client_dashboard():
     profile = current_user.profile
     if profile:
         qualify_form.gross_monthly_income.data = profile.gross_income
-        qualify_form.monthly_debt_loans.data   = profile.monthly_loans
+        qualify_form.monthly_debt_loans.data   = profile.monthly_loans if profile.monthly_loans and profile.monthly_loans > 0 else None
         qualify_form.employment_status.data    = profile.employment_type or ""
         qualify_form.tenure_months.data        = profile.tenure_months
         qualify_form.age.data                  = profile.age
         qualify_form.dependents.data           = profile.dependents if profile.dependents is not None else 0
-        qualify_form.budget_min.data           = profile.budget_min
-        qualify_form.budget_max.data           = profile.budget_max
+        qualify_form.budget_min.data           = profile.budget_min if profile.budget_min and profile.budget_min > 0 else None
+        qualify_form.budget_max.data           = profile.budget_max if profile.budget_max and profile.budget_max > 0 else None
 
     # Latest and all qualification results
     all_results = (QualificationResult.query
@@ -805,7 +823,7 @@ def client_dashboard():
 
     # All approved/available properties for browsing
     all_props = (Property.query
-                 .filter_by(status="available")
+                 .filter(db.func.lower(Property.status) == "available")
                  .filter(db.or_(Property.approval_status == "approved",
                                 Property.approval_status.is_(None)))
                  .options(
@@ -832,39 +850,6 @@ def client_dashboard():
         model_name_choices.append((selected_model_name, selected_model_name))
     qualify_form.preferred_type.choices = model_name_choices
     qualify_form.preferred_type.data = selected_model_name
-
-    # Matched properties — filtered by max loanable + preferred model + budget max.
-    # max_loanable can legitimately be Decimal("0.00") (high-debt / not-qualified
-    # clients) which is falsy, so we check > 0 explicitly rather than relying on
-    # bool(max_loanable).
-    # NOTE: per-term affordability (Qualified / Conditionally Qualified on at
-    # least one of 5/10/15/20 yrs) is applied as a second pass after
-    # property_pricing_map is built below. Houses Not Qualified on ALL terms
-    # are excluded from Recommended. No fallback to all_props: an empty
-    # Recommended section renders its empty state by design.
-    # NOTE (09/15/26, Issue 3): budget_min is a SOFT preference, not a hard
-    # exclusion filter. Houses priced below budget_min still match when the
-    # client can afford them (price <= budget_max AND income-qualified).
-    # Only budget_max is enforced as a hard upper bound (client won't overspend).
-    # Filtered in Python from all_props (already loaded) to avoid a second
-    # full-catalog query.
-    matched_props = []
-    if qual_result:
-        max_loanable_val = float(qual_result.max_loanable) if (qual_result.max_loanable and float(qual_result.max_loanable) > 0) else None
-        budget_max_val = float(profile.budget_max) if (profile and profile.budget_max and float(profile.budget_max) > 0) else None
-
-        def _matches(p):
-            if max_loanable_val is not None and not (p.price is not None and float(p.price) <= max_loanable_val):
-                return False
-            if selected_model_name and (p.name or "") != selected_model_name:
-                return False
-            if budget_max_val is not None and not (p.price is not None and float(p.price) <= budget_max_val):
-                return False
-            return True
-
-        matched_props = [p for p in all_props if _matches(p)]
-        matched_props.sort(key=lambda p: (p.price if p.price is not None else 0))
-
     # Agent contact details per property (for the Conditional Requirements modal).
     agent_contact_map = {}
     for _prop in all_props:
@@ -978,18 +963,62 @@ def client_dashboard():
         prop_id: _compute_property_pricing(prop)
         for prop_id, prop in pricing_props_by_id.items()
     }
-    # Second-pass Recommended filter: keep only houses where the client is at
-    # least Conditionally Qualified on ONE of the 5/10/15/20-yr terms.
-    # Houses Not Qualified across all terms are excluded from Recommended.
     try:
         _client_income_val = float(profile.gross_income) if (profile and profile.gross_income) else 0.0
     except (TypeError, ValueError):
         _client_income_val = 0.0
-    if matched_props and _client_income_val > 0:
-        matched_props = [
-            p for p in matched_props
-            if _is_affordable_any_term(property_pricing_map.get(int(p.id)) if p.id else None, _client_income_val)
-        ]
+
+    # Qualified Models & Recommended Models computation
+    qualified_props = []
+    recommended_props = []
+
+    if qual_result and (qual_result.status or "").strip().lower() != "not qualified":
+        max_loanable_val = float(qual_result.max_loanable) if (qual_result.max_loanable and float(qual_result.max_loanable) > 0) else None
+        bmin = float(profile.budget_min) if (profile and profile.budget_min and float(profile.budget_min) > 0) else None
+        bmax = float(profile.budget_max) if (profile and profile.budget_max and float(profile.budget_max) > 0) else None
+        if bmin is not None and bmax is not None and bmin > bmax:
+            bmin, bmax = bmax, bmin
+
+        for p in all_props:
+            price_val = float(p.price) if p.price is not None else 0.0
+
+            # 1. Max loanable ceiling check
+            if max_loanable_val is not None and price_val > max_loanable_val:
+                continue
+
+            pricing = property_pricing_map.get(int(p.id)) if p.id else None
+
+            # 2. Qualified Models check: must be fully qualified in the 5-year loan term
+            # (which automatically qualifies for 5, 10, 15, and 20-year terms as well).
+            # If not qualified for 5 years, it will not appear in Qualified Models for You.
+            if _client_income_val > 0 and _is_qualified_5_year(pricing, _client_income_val):
+                qualified_props.append(p)
+
+            # 3. Recommended filter: qualified in at least one loan term (e.g. 20-year term)
+            # AND falls within Current Model Preferences budget range (min & max)
+            if _client_income_val > 0 and not _is_affordable_any_term(pricing, _client_income_val):
+                continue
+            if bmin is not None and price_val < bmin:
+                continue
+            if bmax is not None and price_val > bmax:
+                continue
+
+            recommended_props.append(p)
+
+        # Qualified models: sort by price ascending
+        qualified_props.sort(key=lambda p: (float(p.price) if p.price is not None else 0.0))
+
+        # Recommended models: prioritize preferred model if specified, then sort by price ascending
+        if selected_model_name:
+            recommended_props.sort(key=lambda p: (
+                0 if (p.name or "").strip().lower() == selected_model_name.lower() else 1,
+                float(p.price) if p.price is not None else 0.0
+            ))
+        else:
+            recommended_props.sort(key=lambda p: (float(p.price) if p.price is not None else 0.0))
+
+    # Keep matched_props for backward compatibility
+    matched_props = recommended_props
     bought_pricing_map = {}
     for sale in bought_sales:
         prop = sale.property_item
@@ -1041,6 +1070,8 @@ def client_dashboard():
         qual_result=qual_result,
         all_results=all_results,
         all_props=all_props,
+        qualified_props=qualified_props,
+        recommended_props=recommended_props,
         matched_props=matched_props,
         my_trips=my_trips,
         sold_trip_ids=sold_trip_ids,
@@ -1049,7 +1080,7 @@ def client_dashboard():
         requested_prop_ids=requested_prop_ids,
         assessment_count=len(all_results),
         trips_count=len(my_trips),
-        matched_count=len(matched_props),
+        matched_count=len(qualified_props),
         latest_qualification_status=latest_qualification_status,
         detail_request_notifications=detail_request_notifications,
         purchase_form_notifications=purchase_form_notifications,
@@ -1076,7 +1107,7 @@ def agent_dashboard():
         return redirect(url_for("main.index"))
 
     my_props_q = (Property.query
-                  .filter(Property.status == "available")
+                  .filter(db.func.lower(Property.status) == "available")
                   .filter(db.or_(Property.approval_status == "approved", Property.approval_status.is_(None))))
     # Agents now see all published models per 09_02_2026 feedback; admins keep full view.
     # (Removed agent_id filter so agent listings show all approved models, not just own.)
@@ -1419,8 +1450,46 @@ def admin_dashboard():
     pending_trip_requests = [t for t in all_trip_requests if _normalize_trip_status(t.status) == "pending"]
     pending_trip_count = len(pending_trip_requests)
 
-    pending_detail_request_count = PropertyPricingDetailRequest.query.filter_by(status="pending").count()
-    default_annual_interest_rate = _get_system_config_float("pricing_annual_interest_rate", 8.5)
+    pending_details_by_prop = dict(
+        db.session.query(
+            PropertyPricingDetailRequest.property_id,
+            db.func.count(PropertyPricingDetailRequest.id)
+        )
+        .filter(PropertyPricingDetailRequest.status == "pending")
+        .group_by(PropertyPricingDetailRequest.property_id)
+        .all()
+    )
+    pending_detail_request_count = sum(pending_details_by_prop.values())
+
+    pending_purchases_by_prop = dict(
+        db.session.query(
+            TrippingRequest.property_id,
+            db.func.count(TrippingRequest.id)
+        )
+        .outerjoin(PropertySale, PropertySale.trip_id == TrippingRequest.id)
+        .filter(
+            TrippingRequest.purchase_form_submitted.is_(True),
+            PropertySale.id.is_(None)
+        )
+        .group_by(TrippingRequest.property_id)
+        .all()
+    )
+    pending_purchases_total = sum(pending_purchases_by_prop.values())
+
+    purchase_candidates_by_prop = dict(
+        db.session.query(
+            TrippingRequest.property_id,
+            db.func.count(TrippingRequest.id)
+        )
+        .filter(
+            (TrippingRequest.status == "visited") |
+            (TrippingRequest.purchase_form_submitted.is_(True))
+        )
+        .group_by(TrippingRequest.property_id)
+        .all()
+    )
+    total_models_badge_count = pending_detail_request_count + pending_purchases_total
+    default_annual_interest_rate = _get_system_config_float("pricing_annual_interest_rate", 7.5)
 
     trip_dates = sorted({t.preferred_date for t in pending_trip_requests if t.preferred_date})
     available_agent_ids_by_date = {}
@@ -1570,6 +1639,10 @@ def admin_dashboard():
                            pending_trip_requests=all_trip_requests,
                            pending_trip_count=pending_trip_count,
                            pending_detail_request_count=pending_detail_request_count,
+                           pending_details_by_prop=pending_details_by_prop,
+                           pending_purchases_by_prop=pending_purchases_by_prop,
+                           purchase_candidates_by_prop=purchase_candidates_by_prop,
+                           total_models_badge_count=total_models_badge_count,
                            default_annual_interest_rate=default_annual_interest_rate,
                            available_agents_by_trip=available_agents_by_trip,
                            activity_logs=activity_logs,
@@ -1717,21 +1790,11 @@ def admin_user_profile(user_id):
                 "similarity": ("High" if r.similarity_score >= 0.70 else ("Moderate" if r.similarity_score >= 0.40 else "Low")) if r.similarity_score is not None else "—",
             })
 
+        has_id_val = "Yes" if (cp and cp.has_valid_id is True) else ("No" if (cp and cp.has_valid_id is False) else "—")
+        has_inc_val = "Yes" if (cp and cp.has_income_proof is True) else ("No" if (cp and cp.has_income_proof is False) else "—")
         data["documents"] = {
-            "valid_id": {
-                "label": "Valid ID",
-                "has_file": bool(cp and cp.valid_id_data),
-                "filename": (cp.valid_id_filename if cp and cp.valid_id_filename else "—"),
-                "view_url": (url_for("main.admin_view_client_document_tab", user_id=user.id, doc_kind="valid-id")
-                             if cp and cp.valid_id_data else None),
-            },
-            "income_proof": {
-                "label": "Proof of Income",
-                "has_file": bool(cp and cp.income_proof_data),
-                "filename": (cp.income_proof_filename if cp and cp.income_proof_filename else "—"),
-                "view_url": (url_for("main.admin_view_client_document_tab", user_id=user.id, doc_kind="income-proof")
-                             if cp and cp.income_proof_data else None),
-            },
+            "has_valid_id": has_id_val,
+            "has_income_proof": has_inc_val,
         }
         client_sales = (PropertySale.query
                         .filter_by(client_id=user.id)
@@ -2732,8 +2795,15 @@ def admin_c50_seed():
     if current_user.role != "admin":
         return jsonify({"error": "Forbidden"}), 403
 
-    if HistoricalBuyer.query.count() >= 10:
+    req_json = request.get_json(silent=True) or {}
+    replace = request.args.get("replace", "false").lower() in ("true", "1") or bool(req_json.get("replace"))
+
+    if HistoricalBuyer.query.count() >= 10 and not replace:
         return jsonify({"error": "Training data already exists. Delete records first or retrain."}), 409
+
+    if replace:
+        HistoricalBuyer.query.delete()
+        db.session.commit()
 
     import random
     random.seed(2026)
@@ -2767,11 +2837,14 @@ def admin_c50_seed():
             weighted_pool.extend([emp] * w)
         return random.choice(weighted_pool) if weighted_pool else "employed"
 
+    q_max = _get_system_config_float("dti_qualified_max", 30.0) / 100.0
+    c_max = _get_system_config_float("dti_conditional_max", 42.0) / 100.0
+
     records = []
-    # --- Clearly Qualified profiles ---
+    # --- Clearly Qualified profiles (DTI <= 30%) ---
     for _ in range(30):
         gi  = random.uniform(35_000, 120_000)
-        ml  = random.uniform(0, gi * 0.25)
+        ml  = random.uniform(0, gi * q_max)
         ten = random.randint(12, 120)
         age = random.randint(25, 50)
         dep = random.randint(0, 3)
@@ -2785,10 +2858,10 @@ def admin_c50_seed():
             outcome="Qualified"
         ))
 
-    # --- Conditionally Qualified profiles ---
+    # --- Conditionally Qualified profiles (DTI 30% to 42%) ---
     for _ in range(25):
         gi  = random.uniform(18_000, 50_000)
-        ml  = random.uniform(gi * 0.25, gi * 0.42)
+        ml  = random.uniform(gi * q_max, gi * c_max)
         ten = random.randint(3, 24)
         age = random.randint(22, 55)
         dep = random.randint(0, 4)
@@ -2802,10 +2875,10 @@ def admin_c50_seed():
             outcome="Conditionally Qualified"
         ))
 
-    # --- Not Qualified profiles ---
+    # --- Not Qualified profiles (DTI > 42%) ---
     for _ in range(25):
         gi  = random.uniform(8_000, 30_000)
-        ml  = random.uniform(gi * 0.42, gi * 0.85)
+        ml  = random.uniform(gi * c_max, gi * 0.85)
         ten = random.randint(0, 12)
         age = random.randint(18, 60)
         dep = random.randint(0, 5)
@@ -2868,7 +2941,7 @@ def admin_criteria_save():
         # Reload c50_engine criteria
         configs = {c.key: c.value for c in SystemConfig.query.all()}
         c50_engine.update_criteria({
-            "dti_qualified_max":    float(configs.get("dti_qualified_max",    35.0)),
+            "dti_qualified_max":    float(configs.get("dti_qualified_max",    30.0)),
             "dti_conditional_max":  float(configs.get("dti_conditional_max",  42.0)),
             "confidence_threshold": float(configs.get("confidence_threshold", 72)) / 100.0,
             "min_tenure_months":    int(float(configs.get("min_tenure_months", 6))),
@@ -2927,21 +3000,25 @@ def admin_settings_security():
         return jsonify({"error": "Forbidden"}), 403
 
     data = request.get_json(silent=True) or {}
-    allowed = {"max_login_attempts", "max_forgot_password_attempts", "session_timeout_mins", "min_password_length"}
+    allowed = {"max_login_attempts", "max_forgot_password_attempts", "session_timeout_mins", "min_password_length", "email_verification_enabled"}
 
     try:
         updated = {}
         for key in allowed:
             if key in data:
-                val = int(float(data[key]))
-                if key == "max_login_attempts" and (val < 1 or val > 20):
-                    return jsonify({"error": "Max login attempts must be between 1 and 20."}), 400
-                if key == "max_forgot_password_attempts" and (val < 1 or val > 20):
-                    return jsonify({"error": "Max forgot-password attempts must be between 1 and 20."}), 400
-                if key == "session_timeout_mins" and (val < 5 or val > 1440):
-                    return jsonify({"error": "Session timeout must be between 5 and 1440 minutes."}), 400
-                if key == "min_password_length" and (val < 8 or val > 32):
-                    return jsonify({"error": "Min password length must be between 8 and 32."}), 400
+                if key == "email_verification_enabled":
+                    raw_val = data[key]
+                    val = "true" if (raw_val is True or str(raw_val).lower() in {"true", "1", "yes"}) else "false"
+                else:
+                    val = int(float(data[key]))
+                    if key == "max_login_attempts" and (val < 1 or val > 20):
+                        return jsonify({"error": "Max login attempts must be between 1 and 20."}), 400
+                    if key == "max_forgot_password_attempts" and (val < 1 or val > 20):
+                        return jsonify({"error": "Max forgot-password attempts must be between 1 and 20."}), 400
+                    if key == "session_timeout_mins" and (val < 5 or val > 1440):
+                        return jsonify({"error": "Session timeout must be between 5 and 1440 minutes."}), 400
+                    if key == "min_password_length" and (val < 8 or val > 32):
+                        return jsonify({"error": "Min password length must be between 8 and 32."}), 400
                 rec = SystemConfig.query.filter_by(key=key).first()
                 if rec:
                     rec.value = str(val)
@@ -3394,8 +3471,6 @@ def agent_edit_property(prop_id):
     prop = db.session.get(Property, prop_id)
     if not prop:
         return jsonify({"error": "Not found"}), 404
-    if prop.status == "sold":
-        return jsonify({"error": "Sold properties can no longer be edited."}), 409
 
     name      = (request.form.get("name") or "").strip()
     street    = (request.form.get("street") or "").strip()
@@ -3526,6 +3601,9 @@ def agent_edit_property(prop_id):
             pass
 
     prop.approval_status = "approved"
+    status_raw = (request.form.get("status") or "").strip().lower()
+    if status_raw in ("available", "reserved", "sold"):
+        prop.status = status_raw
     if unit_id_raw:
         prop.unit_id = unit_id_raw
     elif not prop.unit_id:
@@ -3543,9 +3621,9 @@ def agent_edit_property(prop_id):
     existing.extend(new_names)
     prop.images = ",".join(existing) if existing else None
 
-    log_activity("prop_edit", f"Property updated by admin: \"{prop.name}\"")
+    log_activity("prop_edit", f"Property updated by admin: \"{prop.name}\" (status: {prop.status})")
     db.session.commit()
-    return jsonify({"success": True, "id": prop.id})
+    return jsonify({"success": True, "id": prop.id, "status": prop.status})
 
 
 # ── Agent: delete own property ────────────────────────────────────────────────
@@ -3580,7 +3658,7 @@ def client_request_full_property_details(prop_id):
     prop = db.session.get(Property, prop_id)
     if not prop:
         return jsonify(ok=False, error="Property not found."), 404
-    if prop.status != "available":
+    if (prop.status or "").lower() != "available":
         return jsonify(ok=False, error="Only available properties can receive detail requests."), 409
 
     latest_result = (QualificationResult.query
@@ -3726,6 +3804,28 @@ def agent_reject_full_details_request(req_id):
     return jsonify(ok=True, status="rejected", request_id=req_row.id)
 
 
+@main_bp.route("/qualify/property/<int:prop_id>/detail-status")
+@login_required
+def client_property_detail_status(prop_id):
+    if current_user.role != "client":
+        return jsonify(ok=False, error="Forbidden"), 403
+
+    req = PropertyPricingDetailRequest.query.filter_by(
+        client_id=current_user.id,
+        property_id=prop_id
+    ).first()
+
+    status = (req.status if req else "none").lower()
+    is_approved = (status == "approved")
+
+    return jsonify(
+        ok=True,
+        property_id=prop_id,
+        status=status,
+        approved=is_approved
+    )
+
+
 @main_bp.route("/agent/full-details-history/<int:history_id>/delete", methods=["POST"])
 @login_required
 def agent_delete_full_details_history(history_id):
@@ -3740,12 +3840,29 @@ def agent_delete_full_details_history(history_id):
     if not prop:
         return jsonify(ok=False, error="Property not found."), 404
 
-    if (hist.status or "").lower() == "pending":
-        return jsonify(ok=False, error="Pending requests cannot be removed."), 409
+    client_id = hist.client_id
+    property_id = hist.property_id
+    client_obj = hist.client or db.session.get(User, client_id)
+    client_name = client_obj.full_name if client_obj else f"Client #{client_id}"
 
+    # Delete history record
     db.session.delete(hist)
+    db.session.flush()
+
+    # Also delete the active PropertyPricingDetailRequest for this client and property!
+    # This immediately revokes the client's "View Full Details" access and resets it back to "Request Full Details".
+    PropertyPricingDetailRequest.query.filter_by(
+        client_id=client_id,
+        property_id=property_id
+    ).delete(synchronize_session=False)
+
+    log_activity(
+        "full_details_deleted",
+        f"Full details request deleted for {client_name} on \"{prop.name}\". Full details access revoked and reset."
+    )
+
     db.session.commit()
-    return jsonify(ok=True, deleted_id=history_id)
+    return jsonify(ok=True, deleted_id=history_id, client_id=client_id, property_id=property_id)
 
 
 # ── Agent: approve / reject tripping request ──────────────────────────────────
@@ -4440,6 +4557,7 @@ def agent_profile_save():
     license_no     = (data.get("license_no")     or "").strip()
     contact_no     = (data.get("contact_no")     or "").strip()
     bio            = (data.get("bio")            or "").strip()
+    old_password   = (data.get("old_password")   or "").strip()
     new_password   = (data.get("new_password")   or "").strip()
 
     if not first_name or not last_name or not username:
@@ -4473,6 +4591,10 @@ def agent_profile_save():
     agent_rec.bio        = bio
 
     if new_password:
+        if not old_password:
+            return jsonify({"error": "Current password is required to set a new password."}), 400
+        if not current_user.check_password(old_password):
+            return jsonify({"error": "Current password is incorrect."}), 400
         if len(new_password) < 6:
             return jsonify({"error": "New password must be at least 6 characters."}), 400
         current_user.set_password(new_password)
@@ -4630,6 +4752,7 @@ def admin_profile_save():
     email          = (data.get("email")          or "").strip()
     username       = (data.get("username")       or "").strip()
     contact_number = (data.get("contact_number") or "").strip()
+    old_password   = (data.get("old_password")   or "").strip()
     new_password   = (data.get("new_password")   or "").strip()
 
     if not first_name or not last_name or not username:
@@ -4655,6 +4778,10 @@ def admin_profile_save():
     current_user.contact_number = contact_number
 
     if new_password:
+        if not old_password:
+            return jsonify({"error": "Current password is required to set a new password."}), 400
+        if not current_user.check_password(old_password):
+            return jsonify({"error": "Current password is incorrect."}), 400
         if len(new_password) < 6:
             return jsonify({"error": "New password must be at least 6 characters."}), 400
         current_user.set_password(new_password)
@@ -4829,20 +4956,8 @@ def agent_client_profile(user_id):
             for idx, qr in enumerate(assessment_history)
         ],
         "documents": {
-            "valid_id": {
-                "label": "Valid ID",
-                "has_file": bool(cp and cp.valid_id_data),
-                "filename": (cp.valid_id_filename if cp and cp.valid_id_filename else "—"),
-                "view_url": (url_for("main.agent_view_client_document_tab", user_id=client.id, doc_kind="valid-id")
-                             if cp and cp.valid_id_data else None),
-            },
-            "income_proof": {
-                "label": "Proof of Income",
-                "has_file": bool(cp and cp.income_proof_data),
-                "filename": (cp.income_proof_filename if cp and cp.income_proof_filename else "—"),
-                "view_url": (url_for("main.agent_view_client_document_tab", user_id=client.id, doc_kind="income-proof")
-                             if cp and cp.income_proof_data else None),
-            },
+            "has_valid_id": "Yes" if (cp and cp.has_valid_id is True) else ("No" if (cp and cp.has_valid_id is False) else "—"),
+            "has_income_proof": "Yes" if (cp and cp.has_income_proof is True) else ("No" if (cp and cp.has_income_proof is False) else "—"),
         },
         "profile": {
             "civil_status":       (cp.civil_status or "—").replace("-", " ").title(),

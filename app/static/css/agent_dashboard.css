@@ -358,6 +358,36 @@
   font-weight: 800;
 }
 
+.avail-day-cell.is-past {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  opacity: .48 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.avail-day-cell.is-past:hover {
+  border-color: #e2e8f0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  cursor: not-allowed !important;
+}
+
+.avail-day-cell.is-past .avail-day-number {
+  color: #94a3b8 !important;
+  font-weight: 500 !important;
+}
+
+.avail-day-cell.is-past .avail-day-dot {
+  opacity: .35 !important;
+}
+
+.avail-day-cell.is-past.is-selected {
+  border-color: #cbd5e1 !important;
+  box-shadow: none !important;
+}
+
 .avail-day-number {
   font-weight: 700;
   font-size: var(--fs-sm);

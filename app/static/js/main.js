@@ -99,6 +99,24 @@ function sqhBindNumericFormatting(root) {
     // digit. Force text BEFORE binding (and on re-bind) so formatting sticks.
     try { el.setAttribute('type', 'text'); } catch (_) {}
     try { if (el.type !== 'text') el.type = 'text'; } catch (_) {}
+
+    if (el.value) {
+      var raw = el.value.trim();
+      if (raw === '0.00' || raw === '0') {
+        if (el.placeholder) {
+          el.value = '';
+        }
+      } else {
+        if (/\.00$/.test(raw)) {
+          raw = raw.slice(0, -3);
+        }
+        var formatted = sqhFormatNumericValue(raw);
+        if (formatted !== el.value) {
+          el.value = formatted;
+        }
+      }
+    }
+
     if (el.dataset.sqhCommasBound) return;
     el.dataset.sqhCommasBound = '1';
     el.setAttribute('inputmode', 'decimal');
@@ -116,8 +134,81 @@ function sqhBindNumericFormatting(root) {
         }
       }
     });
+    el.addEventListener('blur', function () {
+      if (!el.value) return;
+      var v = el.value.trim();
+      if (/\.00$/.test(v)) {
+        el.value = v.slice(0, -3);
+      } else if (/\.$/.test(v)) {
+        el.value = v.slice(0, -1);
+      }
+    });
   });
 }
+
+// ── Percentage input formatting (clean decimals, NO commas) ─────
+function sqhFormatPercentageValue(raw) {
+  var s = String(raw == null ? '' : raw);
+  // Keep only digits and decimal points (strip commas, %, letters, spaces)
+  s = s.replace(/[^\d.]/g, '');
+  var firstDot = s.indexOf('.');
+  if (firstDot !== -1) {
+    s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, '');
+  }
+  return s;
+}
+
+function sqhBindPercentageInputs(root) {
+  (root || document).querySelectorAll('input[data-percent]').forEach(function (el) {
+    try { el.setAttribute('type', 'text'); } catch (_) {}
+    try { if (el.type !== 'text') el.type = 'text'; } catch (_) {}
+
+    if (el.value) {
+      var raw = el.value.trim();
+      if ((raw === '0.00' || raw === '0') && el.placeholder && el.id !== 'acp_annual_interest_rate' && el.id !== 'ep_annual_interest_rate') {
+        el.value = '';
+      } else {
+        var clean = sqhFormatPercentageValue(raw);
+        if (clean !== el.value) {
+          el.value = clean;
+        }
+      }
+    }
+
+    if (el.dataset.sqhPercentBound) return;
+    el.dataset.sqhPercentBound = '1';
+    el.setAttribute('inputmode', 'decimal');
+
+    el.addEventListener('input', function () {
+      var tailLen = null;
+      if (typeof el.selectionStart === 'number') {
+        tailLen = el.value.length - el.selectionStart;
+      }
+      var clean = sqhFormatPercentageValue(el.value);
+      if (clean !== el.value) {
+        el.value = clean;
+        if (tailLen !== null) {
+          var pos = Math.max(0, el.value.length - tailLen);
+          try { el.setSelectionRange(pos, pos); } catch (_) {}
+        }
+      }
+    });
+
+    el.addEventListener('blur', function () {
+      if (!el.value) return;
+      var v = el.value.trim();
+      if (/\.$/.test(v)) {
+        el.value = v.slice(0, -1);
+      }
+    });
+  });
+}
+
+window.sqhCleanNumeric = sqhCleanNumeric;
+window.sqhFormatNumericValue = sqhFormatNumericValue;
+window.sqhBindNumericFormatting = sqhBindNumericFormatting;
+window.sqhFormatPercentageValue = sqhFormatPercentageValue;
+window.sqhBindPercentageInputs = sqhBindPercentageInputs;
 
 /* ── ZoomDragController — shared by all image preview modals ── */
 // Single definition site: base.html loads main.js before all dashboard
@@ -344,6 +435,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // ── Comma formatting for numeric inputs ───────────────────────
   sqhBindNumericFormatting();
+  sqhBindPercentageInputs();
 
   // ── Activate existing flash toasts ──────────────────────────────
   document.querySelectorAll('.sqh-toast').forEach(function (toast) {

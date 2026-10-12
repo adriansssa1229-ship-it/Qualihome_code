@@ -1,4 +1,4 @@
-﻿"""Similarity-augmented C5.0-style classifier.
+"""Similarity-augmented C5.0-style classifier.
 
 This module approximates C5.0 with scikit-learn's entropy-based
 DecisionTreeClassifier. For low-confidence predictions, it blends tree
@@ -72,7 +72,7 @@ _model_meta: dict                        = {"trained": False}
 
 # Qualification criteria (admin configurable)
 _criteria: dict = {
-    "dti_qualified_max":    35.0,   # DTI <= this  → Qualified
+    "dti_qualified_max":    30.0,   # DTI <= this  → Qualified
     "dti_conditional_max":  42.0,   # DTI <= this  → Conditionally Qualified
     "confidence_threshold": 0.72,   # below this   → similarity augmentation
     "min_tenure_months":    6,      # < this       → tenure risk flag
@@ -270,10 +270,12 @@ def _rule_predict(dti: float, tenure_months: int,
 def _rule_sim(dti: float, tenure_months: int, employment_type: str) -> float:
     """Pseudo similarity score derived from rules alone."""
     score = 1.0
-    if dti > 42:
-        score -= (dti - 42) / 100.0
-    elif dti > 35:
-        score -= (dti - 35) / 200.0
+    q_max = _criteria.get("dti_qualified_max", 30.0)
+    c_max = _criteria.get("dti_conditional_max", 42.0)
+    if dti > c_max:
+        score -= (dti - c_max) / 100.0
+    elif dti > q_max:
+        score -= (dti - q_max) / 200.0
     if tenure_months < 6:
         score -= 0.10
     return max(0.05, min(0.99, score))

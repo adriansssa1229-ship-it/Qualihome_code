@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v=2.3"></script>
+<script src="{{ url_for('static', filename='js/admin_dashboard.js') }}?v=3.0"></script>
 {% endblock %}
 
 {% block content %}
@@ -36,8 +36,9 @@
     <span class="sidebar-panel-label mt-3">Manage</span>
     <a href="#" class="sidebar-link" data-page="properties">
       <i class="fas fa-building"></i> Models
-      {% if pending_detail_request_count %}
-      <span class="sidebar-badge-blue ms-auto" id="sidebarModelsBadge">{{ pending_detail_request_count }}</span>
+      {% set models_badge_num = total_models_badge_count if total_models_badge_count is defined else pending_detail_request_count %}
+      {% if models_badge_num %}
+      <span class="sidebar-badge-blue ms-auto" id="sidebarModelsBadge">{{ models_badge_num }}</span>
       {% endif %}
     </a>
     <a href="#" class="sidebar-link" data-page="trips">
@@ -885,7 +886,7 @@
                 </select>
               </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
               <label class="sqh-form-label">Subdivision</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-building"></i></span>
@@ -906,11 +907,22 @@
                 </select>
               </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
               <label class="sqh-form-label">Unit ID</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-hashtag"></i></span>
                 <input type="text" id="ep_unit_id" class="form-control sqh-form-control" placeholder="e.g. TH-101" maxlength="60">
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="sqh-form-label">Availability Status</label>
+              <div class="input-group sqh-input-group">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-circle-check" style="color:var(--clr-muted);"></i></span>
+                <select id="ep_status" class="form-control sqh-form-control">
+                  <option value="available">Available</option>
+                  <option value="reserved">Reserved</option>
+                  <option value="sold">Sold</option>
+                </select>
               </div>
             </div>
             <div class="col-md-6">
@@ -924,56 +936,56 @@
               <label class="sqh-form-label">Promo Discount (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
-                <input type="text" data-commas id="ep_promo_discount_rate" class="form-control sqh-form-control" value="0">
+                <input type="text" data-percent id="ep_promo_discount_rate" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Reservation Fee (&#8369;) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-receipt"></i></span>
-                <input type="text" data-commas id="ep_reservation_fee" class="form-control sqh-form-control" value="0">
+                <input type="text" data-commas id="ep_reservation_fee" class="form-control sqh-form-control" placeholder="0.00">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Downpayment (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
-                <input type="text" data-commas id="ep_downpayment_rate" class="form-control sqh-form-control" value="0">
+                <input type="text" data-percent id="ep_downpayment_rate" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Downpayment Terms (months) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-calendar-alt"></i></span>
-                <input type="text" data-commas id="ep_downpayment_terms_months" class="form-control sqh-form-control" value="0">
+                <input type="number" id="ep_downpayment_terms_months" class="form-control sqh-form-control" placeholder="0" min="0" step="1">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Loanable Percentage (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
-                <span class="input-group-text sqh-ig-text"><i class="fas fa-percentage"></i></span>
-                <input type="text" data-commas id="ep_loanable_percentage" class="form-control sqh-form-control" value="0">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
+                <input type="text" data-percent id="ep_loanable_percentage" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">VAT Rate (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
-                <span class="input-group-text sqh-ig-text"><i class="fas fa-receipt"></i></span>
-                <input type="text" data-commas id="ep_vat_rate" class="form-control sqh-form-control" value="0">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
+                <input type="text" data-percent id="ep_vat_rate" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">LMF Rate (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
-                <span class="input-group-text sqh-ig-text"><i class="fas fa-file-invoice-dollar"></i></span>
-                <input type="text" data-commas id="ep_lmf_rate" class="form-control sqh-form-control" value="0">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
+                <input type="text" data-percent id="ep_lmf_rate" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Annual Interest Rate (%)</label>
               <div class="input-group sqh-input-group">
-                <span class="input-group-text sqh-ig-text"><i class="fas fa-percentage"></i></span>
-                <input type="text" data-commas id="ep_annual_interest_rate" class="form-control sqh-form-control" value="" placeholder="e.g. 8.50">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
+                <input type="text" data-percent id="ep_annual_interest_rate" class="form-control sqh-form-control" value="" placeholder="e.g. 7.50" inputmode="decimal">
               </div>
               <div class="form-text text-muted small mt-1">Used for the monthly amortization estimate. Leave blank to use the system default of {{ '%.2f'|format(default_annual_interest_rate) }}%.</div>
             </div>
@@ -981,21 +993,21 @@
               <label class="sqh-form-label">Bedrooms</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-bed"></i></span>
-                <input type="number" id="ep_bedrooms" class="form-control sqh-form-control" min="0" step="1" value="0">
+                <input type="number" id="ep_bedrooms" class="form-control sqh-form-control" min="0" step="1" placeholder="0">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Bathrooms</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-bath"></i></span>
-                <input type="number" id="ep_bathrooms" class="form-control sqh-form-control" min="0" step="1" value="0">
+                <input type="number" id="ep_bathrooms" class="form-control sqh-form-control" min="0" step="1" placeholder="0">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Storeys</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-layer-group"></i></span>
-                <input type="number" id="ep_storeys" class="form-control sqh-form-control" min="1" step="1" value="0">
+                <input type="number" id="ep_storeys" class="form-control sqh-form-control" min="1" step="1" placeholder="1">
               </div>
             </div>
             <div class="col-md-6">
@@ -1283,8 +1295,13 @@
           <button type="button" class="sqh-modal-close" data-bs-dismiss="modal" aria-label="Close"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body p-4">
-          <div class="alert alert-info mb-4 d-flex align-items-center justify-content-between gap-2">
-            <div><strong>Trip Reference:</strong> <span id="buyerInfoTripRef">—</span></div>
+          <div class="alert alert-info mb-4 d-flex align-items-center justify-content-between gap-2 flex-wrap">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+              <div><strong>Trip Reference:</strong> <span id="buyerInfoTripRef">—</span></div>
+              <button type="button" class="btn btn-sm btn-primary" id="buyerInfoViewClientBtn" title="View Full Client Account Details">
+                <i class="fas fa-user-circle me-1"></i>View Full Client Account Details
+              </button>
+            </div>
             <span id="purchaseFormStatusBadge" class="sqh-badge d-none">—</span>
           </div>
           <form id="purchaseFormViewBody" onsubmit="return false;" class="d-flex flex-column gap-4">
@@ -2134,56 +2151,56 @@
               <label class="sqh-form-label">Promo Discount (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
-                <input type="text" data-commas id="acp_promo_discount_rate" class="form-control sqh-form-control" value="0">
+                <input type="text" data-percent id="acp_promo_discount_rate" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Reservation Fee (&#8369;) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-receipt"></i></span>
-                <input type="text" data-commas id="acp_reservation_fee" class="form-control sqh-form-control" value="0">
+                <input type="text" data-commas id="acp_reservation_fee" class="form-control sqh-form-control" placeholder="0.00">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Downpayment (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
-                <input type="text" data-commas id="acp_downpayment_rate" class="form-control sqh-form-control" value="0">
+                <input type="text" data-percent id="acp_downpayment_rate" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Downpayment Terms (months) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-calendar-alt"></i></span>
-                <input type="text" data-commas id="acp_downpayment_terms_months" class="form-control sqh-form-control" value="0">
+                <input type="number" id="acp_downpayment_terms_months" class="form-control sqh-form-control" placeholder="0" min="0" step="1">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Loanable Percentage (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
-                <span class="input-group-text sqh-ig-text"><i class="fas fa-percentage"></i></span>
-                <input type="text" data-commas id="acp_loanable_percentage" class="form-control sqh-form-control" value="0">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
+                <input type="text" data-percent id="acp_loanable_percentage" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">VAT Rate (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
-                <span class="input-group-text sqh-ig-text"><i class="fas fa-receipt"></i></span>
-                <input type="text" data-commas id="acp_vat_rate" class="form-control sqh-form-control" value="0">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
+                <input type="text" data-percent id="acp_vat_rate" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">LMF Rate (%) <span class="text-danger">*</span></label>
               <div class="input-group sqh-input-group">
-                <span class="input-group-text sqh-ig-text"><i class="fas fa-file-invoice-dollar"></i></span>
-                <input type="text" data-commas id="acp_lmf_rate" class="form-control sqh-form-control" value="0">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
+                <input type="text" data-percent id="acp_lmf_rate" class="form-control sqh-form-control" placeholder="0.00" inputmode="decimal">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Annual Interest Rate (%)</label>
               <div class="input-group sqh-input-group">
-                <span class="input-group-text sqh-ig-text"><i class="fas fa-percentage"></i></span>
-                <input type="text" data-commas id="acp_annual_interest_rate" class="form-control sqh-form-control" value="{{ '%.2f'|format(default_annual_interest_rate) }}" placeholder="e.g. 8.50">
+                <span class="input-group-text sqh-ig-text"><i class="fas fa-percent"></i></span>
+                <input type="text" data-percent id="acp_annual_interest_rate" class="form-control sqh-form-control" value="{{ '%.2f'|format(default_annual_interest_rate) }}" placeholder="e.g. 7.50" inputmode="decimal">
               </div>
               <div class="form-text text-muted small mt-1">Used for the monthly amortization estimate. Leave the system default of {{ '%.2f'|format(default_annual_interest_rate) }}% if unsure.</div>
             </div>
@@ -2191,21 +2208,21 @@
               <label class="sqh-form-label">Bedrooms</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-bed"></i></span>
-                <input type="number" id="acp_bedrooms" class="form-control sqh-form-control" min="0" step="1" value="0">
+                <input type="number" id="acp_bedrooms" class="form-control sqh-form-control" min="0" step="1" placeholder="0">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Bathrooms</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-bath"></i></span>
-                <input type="number" id="acp_bathrooms" class="form-control sqh-form-control" min="0" step="1" value="0">
+                <input type="number" id="acp_bathrooms" class="form-control sqh-form-control" min="0" step="1" placeholder="0">
               </div>
             </div>
             <div class="col-md-6">
               <label class="sqh-form-label">Storeys</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-layer-group"></i></span>
-                <input type="number" id="acp_storeys" class="form-control sqh-form-control" min="1" step="1" value="0">
+                <input type="number" id="acp_storeys" class="form-control sqh-form-control" min="1" step="1" placeholder="1">
               </div>
             </div>
             <div class="col-md-6">
@@ -2629,6 +2646,9 @@
           {% if psgc_tail and psgc_tail not in full_loc %}
           {% set full_loc = ((full_loc ~ ', ' ~ psgc_tail)|trim(', ')) %}
           {% endif %}
+          {% set pending_details_count = pending_details_by_prop.get(p.id, 0) if pending_details_by_prop else 0 %}
+          {% set purchase_count = pending_purchases_by_prop.get(p.id, 0) if pending_purchases_by_prop else 0 %}
+          {% set purchase_candidates_count = purchase_candidates_by_prop.get(p.id, 0) if purchase_candidates_by_prop else 0 %}
           <div class="col-12 col-sm-6 col-xl-4 prop-card-col"
               data-status="{{ p.status or 'available' }}"
               data-prop-name="{{ p.name }}"
@@ -2654,9 +2674,9 @@
                  data-prop-unit-id="{{ p.unit_id or '' }}"
                  data-prop-type="{{ p.prop_type or '' }}"
                  data-prop-unit-type="{{ p.unit_type or '' }}"
-                 data-prop-price="{{ '{:,.0f}'.format(p.price) }}"
+                 data-prop-price="{{ p.price|commas_input if p.price is not none else '' }}"
                  data-prop-promo-discount-rate="{{ p.promo_discount_rate if p.promo_discount_rate is not none else 0 }}"
-                 data-prop-reservation-fee="{{ p.reservation_fee if p.reservation_fee is not none else 0 }}"
+                 data-prop-reservation-fee="{{ p.reservation_fee|commas_input if p.reservation_fee is not none else '' }}"
                  data-prop-downpayment-rate="{{ p.downpayment_rate if p.downpayment_rate is not none else 0 }}"
                  data-prop-downpayment-terms-months="{{ p.downpayment_terms_months if p.downpayment_terms_months is not none else 0 }}"
                  data-prop-loanable-percentage="{{ p.loanable_percentage if p.loanable_percentage is not none else 0 }}"
@@ -2677,8 +2697,24 @@
                  data-prop-status="{{ p.approval_status or 'approved' }}"
                  data-prop-listing-status="{{ p.status or 'available' }}"
                  data-prop-images="{{ p.images or '' }}"
-                 data-prop-pricing-json="{{ property_pricing_map.get(p.id, {})|tojson|forceescape }}">
+                 data-prop-pricing-json="{{ property_pricing_map.get(p.id, {})|tojson|forceescape }}"
+                  data-pending-details-count="{{ pending_details_count }}"
+                  data-purchases-count="{{ purchase_count }}"
+                  data-purchase-candidates-count="{{ purchase_candidates_count }}">
               <div class="prop-card-img-wrap">
+                <!-- indicator chips for detail requests and purchases -->
+                <div class="prop-card-indicators-top">
+                  {% if pending_details_count > 0 %}
+                  <span class="prop-indicator-chip chip-blue" title="{{ pending_details_count }} Pending Detail Request{{ 's' if pending_details_count > 1 else '' }}">
+                    <i class="fas fa-file-lines me-1"></i>{{ pending_details_count }} Detail Request{{ 's' if pending_details_count > 1 else '' }}
+                  </span>
+                  {% endif %}
+                  {% if purchase_count > 0 %}
+                  <span class="prop-indicator-chip chip-green" title="{{ purchase_count }} Purchase Request{{ 's' if purchase_count > 1 else '' }}">
+                    <i class="fas fa-file-signature me-1"></i>{{ purchase_count }} Purchase Request{{ 's' if purchase_count > 1 else '' }}
+                  </span>
+                  {% endif %}
+                </div>
                 {% if first_img %}
                 <img src="{{ first_img | img_src }}" alt="{{ p.name }}" class="prop-card-img">
                 {% else %}
@@ -2733,8 +2769,20 @@
                 </div>
                 {% endif %}
                 <div class="prop-card-pending-details-wrap mt-2">
-                  <button type="button" class="btn btn-sm btn-outline-blue px-3 pvm-full-details-btn"><i class="fas fa-file-lines me-1"></i>View Pending Details</button>
-                  <button type="button" class="btn btn-sm btn-outline-lime px-3 pvm-purchase-list-btn"><i class="fas fa-list-check me-1"></i>View Purchase List</button>
+                  <button type="button" class="btn btn-sm btn-outline-blue px-3 pvm-full-details-btn position-relative" data-prop-id="{{ p.id }}">
+                    <i class="fas fa-file-lines me-1"></i>View Pending Details
+                    {% if pending_details_count > 0 %}
+                    <span class="badge bg-primary rounded-pill ms-1 prop-btn-badge pvm-pending-badge">{{ pending_details_count }}</span>
+                    {% endif %}
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-lime px-3 pvm-purchase-list-btn position-relative" data-prop-id="{{ p.id }}">
+                    <i class="fas fa-list-check me-1"></i>View Purchase List
+                    {% if purchase_count > 0 %}
+                    <span class="badge bg-success rounded-pill ms-1 prop-btn-badge pvm-purchase-badge">{{ purchase_count }}</span>
+                    {% elif purchase_candidates_count > 0 %}
+                    <span class="badge bg-secondary rounded-pill ms-1 prop-btn-badge pvm-purchase-badge" title="{{ purchase_candidates_count }} candidate{{ 's' if purchase_candidates_count > 1 else '' }} in purchase list">{{ purchase_candidates_count }}</span>
+                    {% endif %}
+                  </button>
                 </div>
               </div>
             </div>
@@ -3312,7 +3360,7 @@
                 <div class="sub-card-loc"><i class="fas fa-calendar-alt me-1"></i>{{ pr.created_at.strftime('%b %d, %Y') if pr.created_at else '—' }}</div>
                 <div class="sub-card-footer">
                   <span class="sub-card-badge">{{ sub_counts.get(pr.id, 0) }} Subdivision{{ 's' if sub_counts.get(pr.id, 0) != 1 else '' }}</span>
-                  <a href="#" class="sub-card-manage" data-goto="subdivisions">Manage <i class="fas fa-arrow-right ms-1"></i></a>
+                  <a href="#" class="sub-card-manage" data-goto="subdivisions" data-project-id="{{ pr.id }}" data-project-name="{{ pr.name }}">Manage <i class="fas fa-arrow-right ms-1"></i></a>
                 </div>
               </div>
             </div>
@@ -3356,13 +3404,38 @@
           <input type="text" id="subSearch" class="form-control dash-fb-input" placeholder="e.g. Camella Homes…">
         </div>
         <div class="dash-fb-group">
+          <label class="dash-fb-label"><i class="fas fa-building me-1"></i>Project</label>
+          <select id="subProjectFilter" class="form-select dash-fb-select">
+            <option value="">All Projects</option>
+            {% for pr in all_projects %}
+            <option value="{{ pr.id }}">{{ pr.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="dash-fb-group">
           <label class="dash-fb-label"><i class="fas fa-map-marker-alt me-1"></i>Location</label>
           <select id="subLocationFilter" class="form-select dash-fb-select">
-            <option value="">All</option>
-            {% set sub_locs = all_subdivisions | map(attribute='location') | select('string') | list | sort %}
-            {% for loc in sub_locs | unique %}
-            <option value="{{ loc }}">{{ loc }}</option>
+            <option value="">All Locations</option>
+            {% for pr in all_projects %}
+              {% set pr_subs = all_subdivisions | selectattr('project_id', 'equalto', pr.id) | list %}
+              {% set pr_locs = pr_subs | map(attribute='city_province') | select('string') | list | unique | sort %}
+              {% if pr_locs %}
+              <optgroup label="{{ pr.name }}" data-project-id="{{ pr.id }}">
+                {% for loc in pr_locs %}
+                <option value="{{ loc }}" data-project-id="{{ pr.id }}">{{ loc }}</option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
             {% endfor %}
+            {% set other_subs = all_subdivisions | rejectattr('project_id') | list %}
+            {% set other_locs = other_subs | map(attribute='city_province') | select('string') | list | unique | sort %}
+            {% if other_locs %}
+            <optgroup label="Other Locations" data-project-id="">
+              {% for loc in other_locs %}
+              <option value="{{ loc }}" data-project-id="">{{ loc }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endif %}
           </select>
         </div>
         <div class="dash-fb-actions">
@@ -3374,7 +3447,10 @@
           {% for s in all_subdivisions %}
           <div class="col-12 col-sm-6 col-xl-4 sub-card-col"
                data-sub-name="{{ s.name }}"
-               data-location="{{ s.location or '' }}">
+               data-project-id="{{ s.project_id or '' }}"
+               data-project-name="{{ s.project.name if s.project else '' }}"
+               data-location="{{ s.location or '' }}"
+               data-city-province="{{ s.city_province or '' }}">
             <div class="sub-card" data-sub-id="{{ s.id }}"
                  data-sub-name="{{ s.name }}"
                 data-sub-project-id="{{ s.project_id or '' }}"
@@ -3537,7 +3613,7 @@
                     <td class="text-muted small text-nowrap" data-label="Date">{{ r.created_at|ph_datetime('%b %d, %Y %I:%M %p') }}</td>
                     <td data-label="DTI Ratio">
                       {% if r.dti_ratio is not none %}
-                        <span class="fw-semibold {% if r.dti_ratio < 35 %}text-success{% elif r.dti_ratio <= 42 %}text-warning{% else %}text-danger{% endif %}">{{ '%.1f'|format(r.dti_ratio) }}%</span>
+                        <span class="fw-semibold {% if r.dti_ratio <= 30 %}text-success{% elif r.dti_ratio <= 42 %}text-warning{% else %}text-danger{% endif %}">{{ '%.1f'|format(r.dti_ratio) }}%</span>
                       {% else %}—{% endif %}
                     </td>
                     <td data-label="Max Loanable">&#8369;{{ '{:,.0f}'.format(r.max_loanable) if r.max_loanable else '—' }}</td>
@@ -3604,7 +3680,7 @@
                   <li><span class="fw-semibold" style="color: var(--clr-blue);">Conditionally Qualified</span> &mdash; DTI above Qualified but at or below the Conditional max. Clients qualify with conditions (e.g. co-borrower, longer loan term, higher down payment).</li>
                   <li><span class="fw-semibold" style="color: var(--clr-primary);">Not Qualified</span> &mdash; DTI above the Conditional max. Derived automatically from the Conditional max &mdash; no separate input is needed.</li>
                 </ul>
-                <div class="small text-muted"><i class="fas fa-lightbulb me-1"></i>Example: a client earning &#8369;50,000/month with &#8369;18,000/month in obligations has a DTI of 36%. With defaults (Qualified &le; 35%, Conditional &le; 42%) they fall in the <span class="fw-semibold" style="color:var(--clr-blue);">Conditionally Qualified</span> band.</div>
+                <div class="small text-muted"><i class="fas fa-lightbulb me-1"></i>Example: a client earning &#8369;50,000/month with &#8369;18,000/month in obligations has a DTI of 36%. With defaults (Qualified &le; 30%, Conditional &le; 42%) they fall in the <span class="fw-semibold" style="color:var(--clr-blue);">Conditionally Qualified</span> band.</div>
               </div>
             </div>
             <div class="row g-3">
@@ -3614,7 +3690,7 @@
                 <label class="sqh-form-label fw-semibold">Qualified — Max DTI (%)</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-check-circle"></i></span>
-                  <input type="number" id="crit_dti_qualified_max" class="form-control sqh-form-control" value="{{ q_crit.value if q_crit else '35' }}" min="1" max="100" step="0.5">
+                  <input type="number" id="crit_dti_qualified_max" class="form-control sqh-form-control" value="{{ q_crit.value if q_crit else '30' }}" min="1" max="100" step="0.5">
                 </div>
                 <div class="form-text">DTI &le; this &rarr; <span class="fw-semibold" style="color: var(--clr-accent-dk);">Qualified</span></div>
               </div>
@@ -3831,33 +3907,27 @@
 
         {# Stat cards row #}
         <div class="row g-4">
-          <div class="col-6 col-xl-3">
+          <div class="col-12 col-md-4">
             <div class="stat-card" style="border-left-color:var(--clr-primary);">
               <div class="stat-icon ic-red"><i class="fas fa-brain"></i></div>
               <div>
-                <div class="stat-val" style="font-size:1rem;line-height:1.3;">
+                <div class="stat-val" id="c50StatEngineStatus" style="font-size:1rem;line-height:1.3;">
                   {% if model_meta.trained %}C5.0 Model{% else %}Rule-Based Fallback{% endif %}
                 </div>
                 <div class="stat-lbl">Engine Status</div>
               </div>
             </div>
           </div>
-          <div class="col-6 col-xl-3">
+          <div class="col-12 col-md-4">
             <div class="stat-card" style="border-left-color:var(--clr-blue);">
               <div class="stat-icon ic-blue"><i class="fas fa-database"></i></div>
-              <div><div class="stat-val">{% if model_meta.trained %}{{ model_meta.n_samples }}{% else %}—{% endif %}</div><div class="stat-lbl">Training Records</div></div>
+              <div><div class="stat-val" id="c50StatRecords">{% if model_meta.trained %}{{ model_meta.n_samples }}{% else %}—{% endif %}</div><div class="stat-lbl">Training Records</div></div>
             </div>
           </div>
-          <div class="col-6 col-xl-3">
-            <div class="stat-card" style="border-left-color:var(--clr-accent);">
-              <div class="stat-icon ic-lime"><i class="fas fa-bullseye"></i></div>
-              <div><div class="stat-val">{% if model_meta.trained %}{{ model_meta.train_accuracy }}%{% else %}—{% endif %}</div><div class="stat-lbl">Model Accuracy</div></div>
-            </div>
-          </div>
-          <div class="col-6 col-xl-3">
+          <div class="col-12 col-md-4">
             <div class="stat-card" style="border-left-color:var(--clr-warning);">
               <div class="stat-icon ic-amber"><i class="fas fa-sitemap"></i></div>
-              <div><div class="stat-val">{% if model_meta.trained %}{{ model_meta.tree_depth }}{% else %}—{% endif %}</div><div class="stat-lbl">Tree Depth</div></div>
+              <div><div class="stat-val" id="c50StatDepth">{% if model_meta.trained %}{{ model_meta.tree_depth }}{% else %}—{% endif %}</div><div class="stat-lbl">Tree Depth</div></div>
             </div>
           </div>
         </div>
@@ -3916,7 +3986,7 @@
                     <td data-label="Loans">&#8369;{{ '{:,.0f}'.format(b.monthly_loans) if b.monthly_loans else '0' }}</td>
                     <td data-label="DTI">
                       {% if b.dti_ratio is not none %}
-                        <span class="{% if b.dti_ratio < 35 %}text-success{% elif b.dti_ratio <= 42 %}text-warning{% else %}text-danger{% endif %} fw-semibold">{{ '%.1f'|format(b.dti_ratio) }}%</span>
+                        <span class="{% if b.dti_ratio <= 30 %}text-success{% elif b.dti_ratio <= 42 %}text-warning{% else %}text-danger{% endif %} fw-semibold">{{ '%.1f'|format(b.dti_ratio) }}%</span>
                       {% else %}—{% endif %}
                     </td>
                     <td data-label="Outcome">
@@ -3976,7 +4046,7 @@
                     <td data-label="Loans">&#8369;{{ '{:,.0f}'.format(b.monthly_loans) if b.monthly_loans else '0' }}</td>
                     <td data-label="DTI">
                       {% if b.dti_ratio is not none %}
-                        <span class="{% if b.dti_ratio < 35 %}text-success{% elif b.dti_ratio <= 42 %}text-warning{% else %}text-danger{% endif %} fw-semibold">{{ '%.1f'|format(b.dti_ratio) }}%</span>
+                        <span class="{% if b.dti_ratio <= 30 %}text-success{% elif b.dti_ratio <= 42 %}text-warning{% else %}text-danger{% endif %} fw-semibold">{{ '%.1f'|format(b.dti_ratio) }}%</span>
                       {% else %}—{% endif %}
                     </td>
                     <td data-label="Outcome">
@@ -4639,7 +4709,20 @@
               </div>
             </div>
             <div class="row g-3">
-              <div class="col-md-6">
+              <div class="col-12 col-md-4">
+                <label class="sqh-form-label"><i class="fas fa-key me-1 text-crimson"></i>Current Password</label>
+                <div class="input-group sqh-input-group">
+                  <span class="input-group-text sqh-ig-text"><i class="fas fa-key"></i></span>
+                  <input type="password" id="admin_prof_old_password" class="form-control sqh-form-control"
+                         placeholder="Enter current password">
+                  <button type="button" class="btn sqh-eye-btn sqh-pw-toggle toggle-password" data-target="admin_prof_old_password"
+                          tabindex="-1" aria-label="Toggle visibility">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+                <div class="sqh-live-error" id="admin_prof_old_password_error"></div>
+              </div>
+              <div class="col-12 col-md-4">
                 <label class="sqh-form-label"><i class="fas fa-lock me-1 text-crimson"></i>New Password</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-lock"></i></span>
@@ -4658,7 +4741,7 @@
                 </ul>
                 <div class="sqh-live-error" id="admin_prof_new_password_error"></div>
               </div>
-              <div class="col-md-6">
+              <div class="col-12 col-md-4">
                 <label class="sqh-form-label"><i class="fas fa-lock me-1 text-crimson"></i>Confirm New Password</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-lock"></i></span>
@@ -4834,6 +4917,22 @@
                 </div>
                 <div class="form-text">Minimum length used together with uppercase, number, and symbol requirements.</div>
               </div>
+              <div class="col-12 mt-3 pt-3 border-top">
+                <div class="d-flex align-items-center justify-content-between p-3" style="background:rgba(26,38,153,.03);border:1px solid rgba(26,38,153,.12);border-radius:10px;">
+                  <div>
+                    <div class="fw-bold mb-1" style="color:var(--clr-primary);">
+                      <i class="fas fa-envelope-circle-check me-2" style="color:var(--clr-blue);"></i>Require Gmail OTP on Registration
+                    </div>
+                    <div class="text-muted small">
+                      When enabled, newly registered clients must verify their account via a 6-digit OTP sent to their Gmail address.
+                    </div>
+                  </div>
+                  <div class="form-check form-switch fs-4 ms-3">
+                    <input class="form-check-input" type="checkbox" id="set_email_verification_enabled" role="switch"
+                           {% if settings_dict.get('email_verification_enabled', 'true') == 'true' %}checked{% endif %}>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -4853,7 +4952,7 @@
               </div>
             </div>
             <div class="collapse mb-3" id="infoCollapseRBAC">
-              <div class="sqh-info-box">Reference chart of the three system roles and their platform permissions. These are fixed by the system and cannot be modified here. Admins manage settings; Agents handle property listings; Clients submit pre-qualification requests.</div>
+              <div class="sqh-info-box">Reference chart of the three system roles and their platform permissions. These are fixed by the system and cannot be modified here. Admins manage properties and settings; Agents handle tripping requests and client sales; Clients submit pre-qualification requests.</div>
             </div>
             <div class="table-responsive">
               <table class="table sqh-table mb-0 small" id="rbacTable">
@@ -4890,7 +4989,7 @@
                     </td>
                     <td><i class="fas fa-check text-success"></i></td>
                     <td><i class="fas fa-times text-danger"></i></td>
-                    <td><span class="text-muted small">Upload &amp; Edit</span></td>
+                    <td><span class="text-muted small">View Only</span></td>
                     <td><span class="text-muted small">Approve / Reject</span></td>
                     <td><i class="fas fa-times text-danger"></i></td>
                     <td><i class="fas fa-times text-danger"></i></td>
@@ -4974,7 +5073,7 @@
                 </div>
                 <div class="col-sm-6 col-md-4 col-xl-2">
                   <div class="stat-card" style="padding:.85rem 1rem;">
-                    <div><div class="stat-val" id="si_model_acc" style="font-size:1.3rem;">—</div><div class="stat-lbl" style="font-size:.8rem;">Model Accuracy</div></div>
+                    <div><div class="stat-val" id="si_model_acc" style="font-size:1.3rem;">Active</div><div class="stat-lbl" style="font-size:.8rem;">Engine Status</div></div>
                   </div>
                 </div>
               </div>

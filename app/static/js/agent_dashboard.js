@@ -1,4 +1,4 @@
-﻿/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    Agent Dashboard — JavaScript
    ═══════════════════════════════════════════════════════════════ */
 
@@ -64,8 +64,21 @@ function _agGetJSON(url) {
         var mBrgy = url.match(/\/api\/psgc\/barangays\?city_mun_code=([^&]+)/);
         var directUrl = '';
         if (url.indexOf('/api/psgc/regions') === 0) directUrl = apiBase + '/regions/';
-        else if (mReg) directUrl = apiBase + '/regions/' + decodeURIComponent(mReg[1]) + '/provinces/';
-        else if (mCity && mCity[1]) directUrl = apiBase + '/provinces/' + decodeURIComponent(mCity[1]) + '/cities-municipalities/';
+        else if (mReg) {
+          var rCode = decodeURIComponent(mReg[1]);
+          if (rCode === '130000000' || rCode.indexOf('13') === 0) {
+            return Promise.resolve([{ code: '130000000', name: 'Metro Manila' }]);
+          }
+          directUrl = apiBase + '/regions/' + rCode + '/provinces/';
+        }
+        else if (mCity && mCity[1]) {
+          var pCode = decodeURIComponent(mCity[1]);
+          if (pCode === '130000000' || pCode.indexOf('13') === 0) {
+            directUrl = apiBase + '/regions/' + pCode + '/cities-municipalities/';
+          } else {
+            directUrl = apiBase + '/provinces/' + pCode + '/cities-municipalities/';
+          }
+        }
         else if (mCity && mCity[2]) directUrl = apiBase + '/regions/' + decodeURIComponent(mCity[2]) + '/cities-municipalities/';
         else if (mBrgy) directUrl = apiBase + '/cities-municipalities/' + decodeURIComponent(mBrgy[1]) + '/barangays/';
         if (!directUrl) throw new Error((res.data && res.data.error) || 'Failed to load PSGC data');
@@ -164,6 +177,10 @@ function initAgentSubmitPsgc() {
       _agFillSelect(provinceSel, items, '-- Select --', '');
       _agResetSelect(citySel, '-- Select --');
       _agResetSelect(brgySel, '-- Select --');
+      if (items && items.length === 1) {
+        provinceSel.value = items[0].code;
+        return loadCities();
+      }
       _agSyncSubmitLocation();
     });
   }
@@ -241,6 +258,10 @@ function initAgentEditPsgc() {
       _agFillSelect(provinceSel, items, '-- Select --', '');
       _agResetSelect(citySel, '-- Select --');
       _agResetSelect(brgySel, '-- Select --');
+      if (items && items.length === 1) {
+        provinceSel.value = items[0].code;
+        return loadCities();
+      }
       _agSyncEditLocation();
     });
   }
@@ -316,15 +337,19 @@ function _agPrefillEditPsgc(codes) {
       return Promise.resolve();
     }
     return _agGetJSON('/api/psgc/provinces?region_code=' + encodeURIComponent(regionCode)).then(function (provinces) {
-      _agFillSelect(provinceSel, provinces, '-- Select --', provinceCode);
-      if (!provinceCode && !citymunCode) {
+      var effProvinceCode = provinceCode;
+      if (!effProvinceCode && provinces && provinces.length === 1) {
+        effProvinceCode = provinces[0].code;
+      }
+      _agFillSelect(provinceSel, provinces, '-- Select --', effProvinceCode);
+      if (!effProvinceCode && !citymunCode) {
         _agResetSelect(citySel, '-- Select --');
         _agResetSelect(brgySel, '-- Select --');
         _agSyncEditLocation();
         return Promise.resolve();
       }
-      var cityQ = provinceCode
-        ? ('province_code=' + encodeURIComponent(provinceCode))
+      var cityQ = effProvinceCode
+        ? ('province_code=' + encodeURIComponent(effProvinceCode))
         : ('region_code=' + encodeURIComponent(regionCode));
       return _agGetJSON('/api/psgc/cities?' + cityQ).then(function (cities) {
         _agFillSelect(citySel, cities, '-- Select --', citymunCode);
@@ -552,6 +577,13 @@ function openEditPropertyModal(propId) {
     if (v === undefined || v === null || v === '') return fallback;
     return String(v).replace(/,/g, '');
   }
+  function formatCurrencyField(val) {
+    if (val === undefined || val === null || val === '') return '';
+    var s = String(val).trim();
+    if (s === '0' || s === '0.00') return '';
+    if (/\.00$/.test(s)) s = s.slice(0, -3);
+    return (typeof sqhFormatNumericValue === 'function') ? sqhFormatNumericValue(s) : s;
+  }
   var listingStatus = (card.dataset.listingStatus || '').toLowerCase();
   _editPropIsSold = listingStatus === 'sold';
   renderAgentPricingBreakdown(card.dataset.pricingJson);
@@ -601,12 +633,12 @@ function openEditPropertyModal(propId) {
     citymunCode: card.dataset.citymunCode || '',
     barangayCode: card.dataset.barangayCode || ''
   });
-  document.getElementById('ep_price').value       = card.dataset.price       || '';
+  document.getElementById('ep_price').value       = formatCurrencyField(card.dataset.price);
   document.getElementById('ep_bedrooms').value    = card.dataset.bedrooms    || '0';
   document.getElementById('ep_bathrooms').value   = card.dataset.bathrooms   || '0';
   document.getElementById('ep_storeys').value     = card.dataset.storeys     || '1';
-  document.getElementById('ep_floor_area').value  = card.dataset.floorArea   || '';
-  document.getElementById('ep_lot_area').value    = card.dataset.lotArea     || '';
+  document.getElementById('ep_floor_area').value  = formatCurrencyField(card.dataset.floorArea);
+  document.getElementById('ep_lot_area').value    = formatCurrencyField(card.dataset.lotArea);
   document.getElementById('ep_description').value = card.dataset.description || '';
   document.getElementById('ep_images').value      = '';
   _pendingNewFiles = [];
@@ -624,7 +656,7 @@ function openEditPropertyModal(propId) {
   var promoDiscountEl = document.getElementById('ep_promo_discount_rate');
   if (promoDiscountEl) promoDiscountEl.value = _cleanNumericText(card.dataset.promoDiscountRate, '0');
   var reservationFeeEl = document.getElementById('ep_reservation_fee');
-  if (reservationFeeEl) reservationFeeEl.value = _cleanNumericText(card.dataset.reservationFee, '0');
+  if (reservationFeeEl) reservationFeeEl.value = formatCurrencyField(card.dataset.reservationFee);
   var downpaymentRateEl = document.getElementById('ep_downpayment_rate');
   if (downpaymentRateEl) downpaymentRateEl.value = _cleanNumericText(card.dataset.downpaymentRate, '0');
   var downpaymentTermsEl = document.getElementById('ep_downpayment_terms_months');
@@ -793,7 +825,15 @@ function openEditPropertyModal(propId) {
     }
   }
 
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('editPropertyModal')).show();
+  var editModalEl = document.getElementById('editPropertyModal');
+  if (typeof sqhBindNumericFormatting === 'function' && editModalEl) {
+    sqhBindNumericFormatting(editModalEl);
+  }
+  if (typeof sqhBindPercentageInputs === 'function' && editModalEl) {
+    sqhBindPercentageInputs(editModalEl);
+  }
+
+  bootstrap.Modal.getOrCreateInstance(editModalEl).show();
 }
 
 document.getElementById('lemPrev') && document.getElementById('lemPrev').addEventListener('click', function (e) {
@@ -1679,11 +1719,11 @@ function openClientModal(userId) {
 
       if (d.documents) {
         html += '<hr class="my-3">';
-        html += '<div class="form-section-title"><i class="fas fa-folder-open me-2"></i>Documentation</div>';
-        html += '<div class="table-responsive cdm-doc-table-wrap"><table class="table sqh-table mb-0 small"><thead><tr><th>Document</th><th>Filename</th><th>Status</th><th>Action</th></tr></thead><tbody>';
-        html += _cdmDocRow(d.documents.valid_id || { label: 'Valid ID', has_file: false, filename: '\u2014', view_url: null });
-        html += _cdmDocRow(d.documents.income_proof || { label: 'Proof of Income', has_file: false, filename: '\u2014', view_url: null });
-        html += '</tbody></table></div>';
+        html += '<div class="form-section-title"><i class="fas fa-id-card me-2"></i>Document Honesty Check</div>';
+        html += '<div class="row g-3 mb-3">';
+        html += _cdmField('Do you currently have one valid ID?', d.documents.has_valid_id || '\u2014');
+        html += _cdmField('Do you currently have proof of income?', d.documents.has_income_proof || '\u2014');
+        html += '</div>';
       }
 
       if (d.assessment) {
@@ -1963,9 +2003,15 @@ document.getElementById('saveProfileBtn') && document.getElementById('saveProfil
     return;
   }
 
+  var oldPass     = (document.getElementById('prof_old_password') ? document.getElementById('prof_old_password').value : '');
   var newPass     = document.getElementById('prof_new_password').value;
   var confirmPass = document.getElementById('prof_confirm_password').value;
   if (newPass) {
+    if (!oldPass) {
+      errEl.textContent = 'Current password is required to set a new password.';
+      errEl.classList.remove('d-none');
+      return;
+    }
     if (newPass.length < 6) {
       errEl.textContent = 'New password must be at least 6 characters.';
       errEl.classList.remove('d-none');
@@ -1992,6 +2038,7 @@ document.getElementById('confirmSaveProfileBtn') && document.getElementById('con
   var saveBtn = document.getElementById('saveProfileBtn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving\u2026'; }
 
+  var oldPass = (document.getElementById('prof_old_password') ? document.getElementById('prof_old_password').value : '');
   var newPass = document.getElementById('prof_new_password').value;
   var payload = {
     first_name:     document.getElementById('prof_first_name').value.trim(),
@@ -2002,7 +2049,8 @@ document.getElementById('confirmSaveProfileBtn') && document.getElementById('con
     license_no:     document.getElementById('prof_license').value.trim(),
     contact_no:     document.getElementById('prof_agent_contact').value.trim(),
     bio:            document.getElementById('prof_bio').value.trim(),
-  };;
+  };
+  if (oldPass) payload.old_password = oldPass;
   if (newPass) payload.new_password = newPass;
 
   fetch('/agent/profile/save', {
@@ -2019,10 +2067,11 @@ document.getElementById('confirmSaveProfileBtn') && document.getElementById('con
         errEl.classList.remove('d-none');
         return;
       }
+      if (document.getElementById('prof_old_password')) document.getElementById('prof_old_password').value = '';
       document.getElementById('prof_new_password').value     = '';
       document.getElementById('prof_confirm_password').value = '';
       // Reset lv states on pw fields
-      ['prof_new_password', 'prof_confirm_password'].forEach(function (id) {
+      ['prof_old_password', 'prof_new_password', 'prof_confirm_password'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.classList.remove('lv-valid', 'lv-invalid');
       });
@@ -2617,7 +2666,7 @@ document.addEventListener('click', function (e) {
 
   // Field IDs that are saved/restored (password fields always reset to blank)
   var PROF_TEXT_FIELDS = ['prof_first_name', 'prof_last_name', 'prof_username', 'prof_contact', 'prof_license', 'prof_bio'];
-  var PROF_PW_FIELDS   = ['prof_new_password', 'prof_confirm_password'];
+  var PROF_PW_FIELDS   = ['prof_old_password', 'prof_new_password', 'prof_confirm_password'];
 
   // Snapshot saved values on load so we can restore on "Leave"
   var _profSnapshot = {};
@@ -2652,7 +2701,7 @@ document.addEventListener('click', function (e) {
       }
     });
     // Clear password error messages
-    ['prof_new_password_error', 'prof_confirm_password_error'].forEach(function (id) {
+    ['prof_old_password_error', 'prof_new_password_error', 'prof_confirm_password_error'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) { el.textContent = ''; el.classList.remove('sqh-err-visible'); }
     });
@@ -2872,14 +2921,15 @@ document.addEventListener('click', function (e) {
   }
 
   function renderSelectedDate() {
+    var todayIso = toIsoDate(new Date());
     var selectedDates = getSelectedDates();
     if (!selectedDates.length) {
-      state.selectedDate = toIsoDate(new Date());
+      state.selectedDate = todayIso;
       state.selectedDates = new Set([state.selectedDate]);
       selectedDates = [state.selectedDate];
     }
-    if (!state.selectedDates.has(state.selectedDate)) {
-      state.selectedDate = selectedDates[0];
+    if (!state.selectedDates.has(state.selectedDate) || state.selectedDate < todayIso) {
+      state.selectedDate = selectedDates[0] || todayIso;
     }
 
     if (selectedDates.length === 1) {
@@ -2902,6 +2952,7 @@ document.addEventListener('click', function (e) {
       addBtn.innerHTML = selectedDates.length === 1
         ? '<i class="fas fa-plus me-1"></i>Add Entry for Selected Date'
         : '<i class="fas fa-layer-group me-1"></i>Mass Update ' + selectedDates.length + ' Dates';
+      addBtn.disabled = selectedDates.length === 0 || selectedDates.some(function (d) { return d < todayIso; });
     }
 
     if (clearSelectionBtn) {
@@ -2919,7 +2970,10 @@ document.addEventListener('click', function (e) {
   }
 
   function getSelectedDates() {
-    return Array.from(state.selectedDates || []).sort();
+    var todayIso = toIsoDate(new Date());
+    return Array.from(state.selectedDates || [])
+      .filter(function (d) { return d >= todayIso; })
+      .sort();
   }
 
   function renderEntriesForDate(isoDate) {
@@ -2989,11 +3043,13 @@ document.addEventListener('click', function (e) {
     for (var day = 1; day <= daysInMonth; day++) {
       var d = new Date(state.year, state.month, day);
       var iso = toIsoDate(d);
+      var isPast = iso < todayIso;
       var status = getDateStatus(iso);
       var cls = 'avail-day-cell';
       if (status === 'none') cls += ' has-none';
-      if (state.selectedDates.has(iso)) cls += ' is-selected';
+      if (state.selectedDates.has(iso) && !isPast) cls += ' is-selected';
       if (iso === todayIso) cls += ' is-today';
+      if (isPast) cls += ' is-past';
       if (status === 'available') cls += ' has-available';
       if (status === 'not_available') cls += ' has-not-available';
 
@@ -3001,6 +3057,11 @@ document.addEventListener('click', function (e) {
       btn.type = 'button';
       btn.className = cls;
       btn.setAttribute('data-date', iso);
+      if (isPast) {
+        btn.setAttribute('data-past', 'true');
+        btn.setAttribute('aria-disabled', 'true');
+        btn.setAttribute('title', 'Past date (locked - cannot be selected)');
+      }
       btn.innerHTML = ''
         + '<span class="avail-day-number">' + day + '</span>'
         + '<span class="avail-day-dot"></span>';
@@ -3161,6 +3222,12 @@ document.addEventListener('click', function (e) {
     var isoDate = cell.getAttribute('data-date');
     if (!isoDate) return;
 
+    var todayIso = toIsoDate(new Date());
+    if (isoDate < todayIso) {
+      showToast('Past dates are locked and cannot be selected.', 'warning');
+      return;
+    }
+
     if (!state.multiSelectEnabled) {
       state.selectedDate = isoDate;
       state.selectedDates = new Set([isoDate]);
@@ -3185,16 +3252,20 @@ document.addEventListener('click', function (e) {
   });
 
   clearSelectionBtn && clearSelectionBtn.addEventListener('click', function () {
+    var todayIso = toIsoDate(new Date());
+    var baseDate = state.selectedDate >= todayIso ? state.selectedDate : todayIso;
     if (!state.multiSelectEnabled) {
       state.multiSelectEnabled = true;
-      state.selectedDates = new Set([state.selectedDate]);
+      state.selectedDate = baseDate;
+      state.selectedDates = new Set([baseDate]);
       showToast('Multi-select enabled.', 'info');
       renderSelectedDate();
       return;
     }
 
     state.multiSelectEnabled = false;
-    state.selectedDates = new Set([state.selectedDate]);
+    state.selectedDate = baseDate;
+    state.selectedDates = new Set([baseDate]);
     showToast('Selection reset to focused date.', 'info');
     renderSelectedDate();
   });
@@ -3210,6 +3281,7 @@ document.addEventListener('click', function (e) {
 
   addBtn.addEventListener('click', function () {
     showError('');
+    var todayIso = toIsoDate(new Date());
     var selectedDates = getSelectedDates();
     var status = (statusInput.value || 'available').trim();
     var payload = {
@@ -3220,8 +3292,8 @@ document.addEventListener('click', function (e) {
       notes: (noteInput.value || '').trim(),
     };
 
-    if (!selectedDates.length) {
-      showError('Please select at least one date from the calendar.');
+    if (!selectedDates.length || selectedDates.some(function (d) { return d < todayIso; })) {
+      showError('Please select at least one future or current date from the calendar.');
       return;
     }
 

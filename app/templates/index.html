@@ -1,4 +1,4 @@
-﻿{% extends 'base.html' %}
+{% extends 'base.html' %}
 {% block title %}QUALIHOME | Annregar Realty{% endblock %}
 
 {% block content %}
@@ -300,7 +300,7 @@ QUALIHOME is Annregar Realty’s official pre-qualification platform. Powered by
         <div class="sqc-card sqc-green">
           <div class="sqc-top">
             <div class="sqc-icon-wrap sqc-icon-green"><i class="fas fa-check-circle"></i></div>
-            <span class="sqc-badge sqc-badge-green">DTI &lt; 35%</span>
+            <span class="sqc-badge sqc-badge-green">DTI &le; 30%</span>
           </div>
           <h3 class="sqc-title">Fully Qualified</h3>
           <p class="sqc-desc">Your debt-to-income ratio is ideal. Lenders are highly likely to approve.</p>
@@ -317,7 +317,7 @@ QUALIHOME is Annregar Realty’s official pre-qualification platform. Powered by
           <span class="sqc-featured-label">Most Common</span>
           <div class="sqc-top">
             <div class="sqc-icon-wrap sqc-icon-blue"><i class="fas fa-exclamation-triangle"></i></div>
-            <span class="sqc-badge sqc-badge-blue">DTI 35–42%</span>
+            <span class="sqc-badge sqc-badge-blue">DTI 30–42%</span>
           </div>
           <h3 class="sqc-title">Conditionally Qualified</h3>
           <p class="sqc-desc">Your ratio is elevated but manageable with compensating factors.</p>
@@ -777,6 +777,61 @@ QUALIHOME is Annregar Realty’s official pre-qualification platform. Powered by
             Description
           </div>
           <p class="fw-semibold small" id="lpPvmDesc" style="color:var(--clr-text);white-space:pre-wrap;"></p>
+        </div>
+
+        <!-- Inquiries & Contact Section -->
+        <div class="pvm-contact-wrap mb-3">
+          <div class="pvm-contact-header">
+            <div class="pvm-contact-header-left">
+              <i class="fas fa-headset pvm-contact-header-icon"></i>
+              <span class="pvm-contact-header-title">For Inquiries &amp; Assistance</span>
+            </div>
+            <span class="pvm-contact-header-subtitle">Annregar Realty</span>
+          </div>
+
+          <div class="pvm-contact-grid">
+            <!-- Facebook Card -->
+            <a href="https://web.facebook.com/annregarrealty1017/?_rdc=1&amp;_rdr#" target="_blank" rel="noopener noreferrer" class="pvm-contact-card pvm-contact-fb" title="Visit Annregar Realty on Facebook">
+              <div class="pvm-contact-icon-wrap fb">
+                <i class="fab fa-facebook-f"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Facebook</div>
+                <div class="pvm-contact-val">Annregar Realty</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+
+            <!-- Gmail / Email Card -->
+            <a href="mailto:annregar.realty@gmail.com" class="pvm-contact-card pvm-contact-email" title="Send Email to Annregar Realty">
+              <div class="pvm-contact-icon-wrap email">
+                <i class="fas fa-envelope"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Gmail</div>
+                <div class="pvm-contact-val">annregar.realty@gmail.com</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+
+            <!-- Phone / Contact Card -->
+            <a href="tel:09178617688" class="pvm-contact-card pvm-contact-phone" title="Call or Text 0917 861 7688">
+              <div class="pvm-contact-icon-wrap phone">
+                <i class="fas fa-phone"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Contact Number</div>
+                <div class="pvm-contact-val">0917 861 7688</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+          </div>
         </div>
 
         <div class="d-flex gap-2 justify-content-end pt-3 border-top lp-pvm-actions">

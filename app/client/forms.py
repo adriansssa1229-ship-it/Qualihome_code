@@ -1,4 +1,4 @@
-﻿import re
+import re
 
 from flask_wtf import FlaskForm
 from wtforms import (
@@ -27,7 +27,6 @@ class Step1FinancialForm(FlaskForm):
     monthly_debt_loans = DecimalField(
         "Monthly Debt / Loan Payments (₱)",
         places=2,
-        default=0,
         filters=[_strip_commas],
         validators=[Optional(), NumberRange(min=0)],
         render_kw={"placeholder": "Car loan, personal loan, credit card, etc.", "type": "text", "inputmode": "decimal"},
@@ -84,7 +83,6 @@ class QualifyForm(FlaskForm):
     monthly_debt_loans = DecimalField(
         "Monthly Debt / Loan Payments (₱)",
         places=2,
-        default=0,
         filters=[_strip_commas],
         validators=[Optional(), NumberRange(min=0)],
         render_kw={"placeholder": "Car loan, personal loan, credit card, etc.", "type": "text", "inputmode": "decimal"},
@@ -153,7 +151,6 @@ class QualifyForm(FlaskForm):
     budget_min = DecimalField(
         "Minimum Budget (₱)",
         places=2,
-        default=0,
         filters=[_strip_commas],
         validators=[DataRequired(message="Minimum budget is required."), NumberRange(min=1, message="Minimum budget must be greater than 0.")],
         render_kw={"placeholder": "e.g. 1500000.00", "type": "text", "inputmode": "decimal"},
@@ -161,7 +158,6 @@ class QualifyForm(FlaskForm):
     budget_max = DecimalField(
         "Maximum Budget (₱)",
         places=2,
-        default=0,
         filters=[_strip_commas],
         validators=[DataRequired(message="Maximum budget is required."), NumberRange(min=1, message="Maximum budget must be greater than 0.")],
         render_kw={"placeholder": "e.g. 4000000.00", "type": "text", "inputmode": "decimal"},

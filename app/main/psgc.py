@@ -48,13 +48,26 @@ def list_provinces(region_code: str) -> list[dict[str, str]]:
     code = quote(str(region_code).strip())
     if not code:
         return []
-    return _fetch_list(f"/regions/{code}/provinces/")
+    # NCR has no provinces in Philippine administrative geography.
+    # Return Metro Manila as the single province option so cascading UI works seamlessly.
+    if code == "130000000" or code.startswith("13"):
+        return [{"code": "130000000", "name": "Metro Manila"}]
+    try:
+        items = _fetch_list(f"/regions/{code}/provinces/")
+    except Exception:
+        items = []
+    if not items and (code == "130000000" or code.startswith("13")):
+        return [{"code": "130000000", "name": "Metro Manila"}]
+    return items
 
 
 def list_cities(province_code: str | None = None, region_code: str | None = None) -> list[dict[str, str]]:
     if province_code:
         code = quote(str(province_code).strip())
         if code:
+            # If province_code is NCR / Metro Manila, fetch cities directly from region
+            if code == "130000000" or code.startswith("13"):
+                return _fetch_list(f"/regions/{code}/cities-municipalities/")
             return _fetch_list(f"/provinces/{code}/cities-municipalities/")
     if region_code:
         code = quote(str(region_code).strip())

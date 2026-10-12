@@ -102,7 +102,7 @@ def qualify():
     }
 
     available_models = (db.session.query(Property.name)
-                        .filter(Property.status == "available")
+                        .filter(db.func.lower(Property.status) == "available")
                         .filter(db.or_(Property.approval_status == "approved", Property.approval_status.is_(None)))
                         .order_by(Property.name.asc())
                         .all())
@@ -121,7 +121,7 @@ def qualify():
         profile = current_user.profile
         if profile:
             form.gross_monthly_income.data = profile.gross_income
-            form.monthly_debt_loans.data   = profile.monthly_loans
+            form.monthly_debt_loans.data   = profile.monthly_loans if profile.monthly_loans and profile.monthly_loans > 0 else None
             form.sss_gsis_umid.data        = profile.sss_gsis_umid or ""
             form.tin_no.data               = profile.tin_no or ""
             form.employment_status.data    = profile.employment_type or ""
@@ -132,8 +132,8 @@ def qualify():
             if preferred_model and not any(v == preferred_model for v, _ in form.preferred_type.choices):
                 form.preferred_type.choices.append((preferred_model, preferred_model))
             form.preferred_type.data       = preferred_model
-            form.budget_min.data           = profile.budget_min
-            form.budget_max.data           = profile.budget_max
+            form.budget_min.data           = profile.budget_min if profile.budget_min and profile.budget_min > 0 else None
+            form.budget_max.data           = profile.budget_max if profile.budget_max and profile.budget_max > 0 else None
 
     if form.validate_on_submit():
         assessment_mode = (request.form.get("assessment_mode") or "reassess").strip().lower()
@@ -147,8 +147,10 @@ def qualify():
 
         profile.gross_income       = form.gross_monthly_income.data
         profile.monthly_loans      = form.monthly_debt_loans.data or 0
-        profile.sss_gsis_umid      = (form.sss_gsis_umid.data or "").strip()[:60] or None
-        profile.tin_no             = (form.tin_no.data or "").strip()[:30] or None
+        if "sss_gsis_umid" in request.form:
+            profile.sss_gsis_umid  = (form.sss_gsis_umid.data or "").strip()[:60] or None
+        if "tin_no" in request.form:
+            profile.tin_no         = (form.tin_no.data or "").strip()[:30] or None
         profile.employment_type    = form.employment_status.data
         profile.tenure_months      = form.tenure_months.data or 0
         profile.age                = form.age.data
@@ -477,6 +479,8 @@ def request_trip():
     prop = db.session.get(Property, prop_id)
     if not prop:
         return jsonify(ok=False, error="Property not found."), 404
+    if (prop.status or "").lower() != "available":
+        return jsonify(ok=False, error="This property is no longer available."), 400
 
     try:
         parsed_date = dt.date.fromisoformat(pref_date)
@@ -679,8 +683,13 @@ def save_profile():
         profile.address = merged or None
 
     # Password change (optional)
+    old_password = data.get("old_password", "").strip()
     new_password = data.get("new_password", "").strip()
     if new_password:
+        if not old_password:
+            return jsonify(ok=False, error="Current password is required to set a new password."), 400
+        if not current_user.check_password(old_password):
+            return jsonify(ok=False, error="Current password is incorrect."), 400
         if len(new_password) < 6:
             return jsonify(ok=False, error="New password must be at least 6 characters."), 400
         current_user.set_password(new_password)

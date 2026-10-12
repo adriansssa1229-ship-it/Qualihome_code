@@ -126,6 +126,35 @@ document.addEventListener('DOMContentLoaded', function () {
     selSub.dispatchEvent(new Event('change'));
   }
 
+  // Navigate to the Subdivisions page showing only one project's subdivisions.
+  function gotoProjectSubdivisions(projectId, projectName) {
+    showPage('subdivisions');
+    var searchInput = document.getElementById('subSearch');
+    if (searchInput) searchInput.value = '';
+    var selProj = document.getElementById('subProjectFilter');
+    if (selProj) {
+      var pidStr = String(projectId || '').trim();
+      var pNameStr = String(projectName || '').trim().toLowerCase();
+      var found = false;
+      for (var i = 0; i < selProj.options.length; i++) {
+        var opt = selProj.options[i];
+        if ((pidStr && String(opt.value) === pidStr) || (pNameStr && opt.textContent.trim().toLowerCase() === pNameStr)) {
+          selProj.selectedIndex = i;
+          found = true;
+          break;
+        }
+      }
+      if (!found) selProj.value = '';
+      selProj.dispatchEvent(new Event('change'));
+    }
+    var selLoc = document.getElementById('subLocationFilter');
+    if (selLoc) {
+      selLoc.value = '';
+      selLoc.dispatchEvent(new Event('change'));
+    }
+  }
+  window.gotoProjectSubdivisions = gotoProjectSubdivisions;
+
   // "View All" / shortcut links inside pages (delegated so cards rendered
   // later by _buildSubCard/_buildProjectCard work too). Preview-modal manage
   // links have dedicated handlers — skipped here to avoid double navigation.
@@ -136,6 +165,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var target = link.getAttribute('data-goto');
     if (target === 'properties' && link.hasAttribute('data-subdivision')) {
       gotoSubdivisionModels(link.getAttribute('data-subdivision'));
+    } else if (target === 'subdivisions' && (link.hasAttribute('data-project-id') || link.hasAttribute('data-project-name'))) {
+      gotoProjectSubdivisions(link.getAttribute('data-project-id'), link.getAttribute('data-project-name'));
     } else {
       showPage(target);
     }
@@ -515,6 +546,7 @@ entriesEl.innerHTML = rows.map(function (row) {
       for (var day = 1; day <= daysInMonth; day++) {
         var d = new Date(state.year, state.month, day);
         var iso = toIsoDate(d);
+        var isPast = iso < todayIso;
         var status = dateStatus(iso);
         var cls = 'avail-day-cell ';
         if (status === 'none') cls += ' has-none';
@@ -522,11 +554,16 @@ entriesEl.innerHTML = rows.map(function (row) {
         if (status === 'not_available') cls += ' has-not-available';
         if (iso === state.selectedDate) cls += ' is-selected';
         if (iso === todayIso) cls += ' is-today';
+        if (isPast) cls += ' is-past';
 
         var cell = document.createElement('button');
         cell.type = 'button';
         cell.className = cls;
         cell.setAttribute('data-date', iso);
+        if (isPast) {
+          cell.setAttribute('data-past', 'true');
+          cell.setAttribute('title', 'Past date');
+        }
         cell.innerHTML = '<span class="avail-day-number">' + day + '</span><span class="avail-day-dot"></span>';
         gridEl.appendChild(cell);
       }
@@ -670,31 +707,73 @@ entriesEl.innerHTML = rows.map(function (row) {
   })();
 
 
-  // ── Projects: search by name + location dropdown (card grid) ──
+  // ── Subdivisions: search by name + project filter + location dropdown (card grid) ──
   (function () {
-    var input = document.getElementById('subSearch');
-    var sel   = document.getElementById('subLocationFilter');
-    var grid  = document.getElementById('subdivisionsGrid');
-    var noRes = document.getElementById('subNoResults');
+    var input   = document.getElementById('subSearch');
+    var projSel = document.getElementById('subProjectFilter');
+    var locSel  = document.getElementById('subLocationFilter');
+    var grid    = document.getElementById('subdivisionsGrid');
+    var noRes   = document.getElementById('subNoResults');
     if (!grid) return;
+
+    function syncLocationOptions(selectedProjectId) {
+      if (!locSel) return;
+      var optgroups = locSel.querySelectorAll('optgroup');
+      if (optgroups.length > 0) {
+        optgroups.forEach(function (og) {
+          var ogPid = og.getAttribute('data-project-id') || '';
+          if (!selectedProjectId) {
+            og.style.display = '';
+            Array.prototype.forEach.call(og.querySelectorAll('option'), function(o) { o.hidden = false; });
+          } else {
+            var match = (String(ogPid) === String(selectedProjectId));
+            og.style.display = match ? '' : 'none';
+            Array.prototype.forEach.call(og.querySelectorAll('option'), function(o) { o.hidden = !match; });
+          }
+        });
+      }
+      if (locSel.selectedIndex > 0) {
+        var activeOpt = locSel.options[locSel.selectedIndex];
+        if (activeOpt && activeOpt.hidden) {
+          locSel.value = '';
+        }
+      }
+    }
 
     function apply() {
       var term = input ? input.value.trim().toLowerCase() : '';
-      var loc  = sel   ? sel.value.toLowerCase() : '';
+      var pid  = projSel ? String(projSel.value || '').trim() : '';
+      var loc  = locSel ? locSel.value.trim().toLowerCase() : '';
       var visibleCount = 0;
       grid.querySelectorAll('.sub-card-col').forEach(function (col) {
-        var name   = (col.getAttribute('data-sub-name') || '').toLowerCase();
-        var rowLoc = (col.getAttribute('data-location') || '').toLowerCase();
-        var textMatch = !term || name.includes(term);
-        var locMatch  = !loc  || rowLoc === loc;
-        var show = textMatch && locMatch;
+        var card = col.querySelector('.sub-card') || col;
+        var name    = (col.getAttribute('data-sub-name') || card.dataset.subName || '').toLowerCase();
+        var colPid  = String(col.getAttribute('data-project-id') || card.dataset.subProjectId || '').trim();
+        var colPname= (col.getAttribute('data-project-name') || card.dataset.subProjectName || '').toLowerCase();
+        var rowLoc  = (col.getAttribute('data-location') || card.dataset.subLocation || '').toLowerCase();
+        var rowCp   = (col.getAttribute('data-city-province') || '').toLowerCase();
+
+        var textMatch = !term || name.includes(term) || colPname.includes(term) || rowLoc.includes(term) || rowCp.includes(term);
+        var projMatch = !pid || colPid === pid;
+        var locMatch  = !loc || rowLoc === loc || rowCp === loc || rowLoc.includes(loc);
+
+        var show = textMatch && projMatch && locMatch;
         col.style.display = show ? '' : 'none';
         if (show) visibleCount++;
       });
-      if (noRes) noRes.classList.toggle('d-none', visibleCount > 0 || (!term && !loc));
+      if (noRes) noRes.classList.toggle('d-none', visibleCount > 0 || (!term && !pid && !loc));
     }
+
+    window.applySubdivisionFilters = apply;
+
     if (input) input.addEventListener('input', apply);
-    if (sel)   sel.addEventListener('change', apply);
+    if (projSel) {
+      projSel.addEventListener('change', function () {
+        syncLocationOptions(projSel.value);
+        apply();
+      });
+    }
+    if (locSel) locSel.addEventListener('change', apply);
   })();
 
   // Restore the last active page after a reload (e.g. after saving a project)
@@ -713,17 +792,39 @@ entriesEl.innerHTML = rows.map(function (row) {
 
 /* ── Admin: user detail modal + account toggle ──────────────── */
 var _udmUserId = null;
+var _udmReturnModalId = null;
 
-function openUserModal(userId) {
+function openUserModal(userId, returnModalId) {
   _udmUserId = userId;
   var loadingEl = document.getElementById('cdm-loading');
   var contentEl = document.getElementById('cdm-body');
   if (!loadingEl || !contentEl) return;
+
+  if (returnModalId) {
+    _udmReturnModalId = returnModalId;
+  } else {
+    var openModal = document.querySelector('.modal.show:not(#clientDetailModal)');
+    _udmReturnModalId = openModal ? openModal.id : null;
+  }
+
+  if (_udmReturnModalId) {
+    var parentModalEl = document.getElementById(_udmReturnModalId);
+    if (parentModalEl) {
+      var parentInstance = bootstrap.Modal.getInstance(parentModalEl);
+      if (parentInstance) {
+        parentInstance.hide();
+      }
+    }
+  }
+
   loadingEl.innerHTML = '<div class="spinner-border" style="color:var(--clr-primary);" role="status"></div>';
   loadingEl.classList.remove('d-none');
   contentEl.classList.add('d-none');
   contentEl.innerHTML = '';
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('clientDetailModal')).show();
+
+  setTimeout(function() {
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('clientDetailModal')).show();
+  }, _udmReturnModalId ? 180 : 0);
 
   fetch('/admin/user/' + userId + '/profile')
     .then(function(r) { return r.json(); })
@@ -848,11 +949,11 @@ function renderUserModal(d) {
 
     if (d.documents) {
       html += '<hr class="my-3">';
-      html += '<div class="form-section-title"><i class="fas fa-folder-open me-2"></i>Documentation</div>';
-      html += '<div class="table-responsive cdm-doc-table-wrap"><table class="table sqh-table mb-0 small"><thead><tr><th>Document</th><th>Filename</th><th>Status</th><th>Action</th></tr></thead><tbody>';
-      html += _cdmDocRow(d.documents.valid_id || { label: 'Valid ID', has_file: false, filename: '—', view_url: null });
-      html += _cdmDocRow(d.documents.income_proof || { label: 'Proof of Income', has_file: false, filename: '—', view_url: null });
-      html += '</tbody></table></div>';
+      html += '<div class="form-section-title"><i class="fas fa-id-card me-2"></i>Document Honesty Check</div>';
+      html += '<div class="row g-3 mb-3">';
+      html += _cdmField('Do you currently have one valid ID?', d.documents.has_valid_id || '—');
+      html += _cdmField('Do you currently have proof of income?', d.documents.has_income_proof || '—');
+      html += '</div>';
     }
 
     if (d.assessment) {
@@ -969,6 +1070,22 @@ function _cdmDocRow(doc) {
     + '<td>' + statusBadge + '</td>'
     + '<td>' + actionHtml + '</td>'
     + '</tr>';
+}
+
+var _clientDetailModalEl = document.getElementById('clientDetailModal');
+if (_clientDetailModalEl) {
+  _clientDetailModalEl.addEventListener('hidden.bs.modal', function() {
+    if (_udmReturnModalId) {
+      var targetModalId = _udmReturnModalId;
+      _udmReturnModalId = null;
+      var targetEl = document.getElementById(targetModalId);
+      if (targetEl) {
+        setTimeout(function() {
+          bootstrap.Modal.getOrCreateInstance(targetEl).show();
+        }, 150);
+      }
+    }
+  });
 }
 
 // Toggle from table rows
@@ -1169,21 +1286,44 @@ function _escAttr(s) {
 function _escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-function _addSubLocationOption(loc) {
-  if (!loc) return;
+function _cleanCityProvince(loc, locMeta) {
+  locMeta = locMeta || {};
+  if (locMeta.citymunName && locMeta.provinceName) {
+    return locMeta.citymunName.replace(/^city of\s+/i, '').trim() + ', ' + locMeta.provinceName.trim();
+  }
+  if (loc) {
+    var parts = loc.split(',').map(function(p){ return p.trim(); }).filter(Boolean);
+    if (parts.length >= 3) {
+      return parts[1].replace(/^city of\s+/i, '').trim() + ', ' + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0].replace(/^city of\s+/i, '').trim() + ', ' + parts[1];
+    } else if (parts.length === 1) {
+      return parts[0];
+    }
+  }
+  return loc || '';
+}
+
+function _addSubLocationOption(loc, projectId, locMeta) {
+  var cleanLoc = _cleanCityProvince(loc, locMeta);
+  if (!cleanLoc) return;
   var sel = document.getElementById('subLocationFilter');
   if (!sel) return;
-  var exists = Array.prototype.some.call(sel.options, function(o) { return o.value === loc; });
+  var exists = Array.prototype.some.call(sel.options, function(o) { return o.value === cleanLoc || o.textContent === cleanLoc; });
   if (!exists) {
     var opt = document.createElement('option');
-    opt.value = loc; opt.textContent = loc;
-    sel.appendChild(opt);
+    opt.value = cleanLoc;
+    opt.textContent = cleanLoc;
+    if (projectId) opt.dataset.projectId = String(projectId);
+    var og = projectId ? sel.querySelector('optgroup[data-project-id="' + projectId + '"]') : null;
+    if (og) og.appendChild(opt);
+    else sel.appendChild(opt);
   }
 }
 function _addSubProjectOption(projectId, projectName, locMeta) {
   if (!projectId || !projectName) return;
   locMeta = locMeta || {};
-  ['subProject', 'editSubProject'].forEach(function (id) {
+  ['subProject', 'editSubProject', 'subProjectFilter'].forEach(function (id) {
     var sel = document.getElementById(id);
     if (!sel) return;
     var pid = String(projectId);
@@ -1260,8 +1400,11 @@ function _buildSubCard(subId, name, loc, desc, imageIds, propCount, locMeta, pro
   locMeta = locMeta || {};
   var col = document.createElement('div');
   col.className = 'col-12 col-sm-6 col-xl-4 sub-card-col';
-  col.dataset.subName  = name;
-  col.dataset.location = loc || '';
+  col.dataset.subName     = name;
+  col.dataset.location    = loc || '';
+  col.dataset.projectId    = projectId || '';
+  col.dataset.projectName  = projectName || '';
+  col.dataset.cityProvince = _cleanCityProvince(loc, locMeta);
   var propLabel = propCount + ' Propert' + (propCount !== 1 ? 'ies' : 'y');
   var imgCountHtml = imageIds.length > 1
     ? '<span class="prop-card-img-count"><i class="fas fa-images me-1"></i>' + imageIds.length + '</span>'
@@ -1365,7 +1508,7 @@ function _buildProjectCard(p) {
         '<div class="sub-card-loc"><i class="fas fa-calendar-alt me-1"></i>' + _escHtml(created) + '</div>' +
         '<div class="sub-card-footer">' +
           '<span class="sub-card-badge">' + subCount + ' Subdivision' + (subCount !== 1 ? 's' : '') + '</span>' +
-          '<a href="#" class="sub-card-manage" data-goto="subdivisions">Manage <i class="fas fa-arrow-right ms-1"></i></a>' +
+          '<a href="#" class="sub-card-manage" data-goto="subdivisions" data-project-id="' + _escAttr(String(p.id || '')) + '" data-project-name="' + _escAttr(name) + '">Manage <i class="fas fa-arrow-right ms-1"></i></a>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -1499,8 +1642,21 @@ function _subGetItems(url) {
       var mBrgy = url.match(/\/api\/psgc\/barangays\?city_mun_code=([^&]+)/);
       var directUrl = '';
       if (url.indexOf('/api/psgc/regions') === 0) directUrl = apiBase + '/regions/';
-      else if (mReg) directUrl = apiBase + '/regions/' + decodeURIComponent(mReg[1]) + '/provinces/';
-      else if (mCity && mCity[1]) directUrl = apiBase + '/provinces/' + decodeURIComponent(mCity[1]) + '/cities-municipalities/';
+      else if (mReg) {
+        var rCode = decodeURIComponent(mReg[1]);
+        if (rCode === '130000000' || rCode.indexOf('13') === 0) {
+          return Promise.resolve([{ code: '130000000', name: 'Metro Manila' }]);
+        }
+        directUrl = apiBase + '/regions/' + rCode + '/provinces/';
+      }
+      else if (mCity && mCity[1]) {
+        var pCode = decodeURIComponent(mCity[1]);
+        if (pCode === '130000000' || pCode.indexOf('13') === 0) {
+          directUrl = apiBase + '/regions/' + pCode + '/cities-municipalities/';
+        } else {
+          directUrl = apiBase + '/provinces/' + pCode + '/cities-municipalities/';
+        }
+      }
       else if (mCity && mCity[2]) directUrl = apiBase + '/regions/' + decodeURIComponent(mCity[2]) + '/cities-municipalities/';
       else if (mBrgy) directUrl = apiBase + '/cities-municipalities/' + decodeURIComponent(mBrgy[1]) + '/barangays/';
       if (!directUrl) throw new Error((res.data && res.data.error) || 'PSGC unavailable');
@@ -1570,6 +1726,10 @@ function initSubdivisionPsgc() {
       _subFillSelect(provinceSel, items, '-- Select --');
       _subResetSelect(citySel, '-- Select --');
       _subResetSelect(brgySel, '-- Select --');
+      if (items && items.length === 1) {
+        provinceSel.value = items[0].code;
+        provinceSel.dispatchEvent(new Event('change'));
+      }
       _syncSubdivisionLocation();
     });
   });
@@ -1663,6 +1823,10 @@ function initEditSubdivisionPsgc() {
       _subFillSelect(provinceSel, items, '-- Select --');
       _subResetSelect(citySel, '-- Select --');
       _subResetSelect(brgySel, '-- Select --');
+      if (items && items.length === 1) {
+        provinceSel.value = items[0].code;
+        provinceSel.dispatchEvent(new Event('change'));
+      }
       _syncEditSubdivisionLocation();
     });
   });
@@ -1741,15 +1905,19 @@ function _preselectEditSubdivisionPsgc(codes) {
       return Promise.resolve();
     }
     return _subGetItems('/api/psgc/provinces?region_code=' + encodeURIComponent(regionCode)).then(function (provinces) {
-      _subFillSelect(provinceSel, provinces, '-- Select --', provinceCode);
-      if (!provinceCode && !citymunCode) {
+      var effProvinceCode = provinceCode;
+      if (!effProvinceCode && provinces && provinces.length === 1) {
+        effProvinceCode = provinces[0].code;
+      }
+      _subFillSelect(provinceSel, provinces, '-- Select --', effProvinceCode);
+      if (!effProvinceCode && !citymunCode) {
         _subResetSelect(citySel, '-- Select --');
         _subResetSelect(brgySel, '-- Select --');
         _syncEditSubdivisionLocation();
         return Promise.resolve();
       }
-      var cityQ = provinceCode
-        ? ('province_code=' + encodeURIComponent(provinceCode))
+      var cityQ = effProvinceCode
+        ? ('province_code=' + encodeURIComponent(effProvinceCode))
         : ('region_code=' + encodeURIComponent(regionCode));
       return _subGetItems('/api/psgc/cities?' + cityQ).then(function (cities) {
         _subFillSelect(citySel, cities, '-- Select --', citymunCode);
@@ -2450,7 +2618,16 @@ _bind('editSubSubmitBtn', 'click', function() {
       card.dataset.subImages      = JSON.stringify(imageIds);
       // Update col filter attributes
       var colEl = card.closest('.sub-card-col');
-      if (colEl) { colEl.dataset.subName = _savedName; colEl.dataset.location = _savedLoc; }
+      if (colEl) {
+        colEl.dataset.subName = _savedName;
+        colEl.dataset.location = _savedLoc;
+        colEl.dataset.projectId = card.dataset.subProjectId;
+        colEl.dataset.projectName = projectName;
+        colEl.dataset.cityProvince = _cleanCityProvince(_savedLoc, {
+          citymunName: document.getElementById('editSubCitymunName').value.trim(),
+          provinceName: document.getElementById('editSubProvinceName').value.trim()
+        });
+      }
       // Update visible name
       var nameEl = card.querySelector('.sub-card-name');
       if (nameEl) nameEl.textContent = _savedName;
@@ -2772,7 +2949,7 @@ document.addEventListener('click', function(e) {
     manageLink.onclick = function(ev) {
       ev.preventDefault();
       bootstrap.Modal.getInstance(document.getElementById('projectPreviewModal'))?.hide();
-      if (typeof showPage === 'function') showPage('subdivisions');
+      gotoProjectSubdivisions(projectId, name);
     };
   }
 
@@ -2827,8 +3004,11 @@ _bind('propApprovalConfirmBtn', 'click', function() {
       var listingStatus = (card.dataset.propListingStatus || '').toLowerCase();
       var listingBadge = document.createElement('span');
       if (listingStatus === 'sold') {
-        listingBadge.className = 'sqh-badge badge-not-qualified';
+        listingBadge.className = 'sqh-badge badge-sold';
         listingBadge.textContent = 'Sold';
+      } else if (listingStatus === 'reserved') {
+        listingBadge.className = 'sqh-badge badge-conditional';
+        listingBadge.textContent = 'Reserved';
       } else {
         listingBadge.className = 'sqh-badge badge-qualified';
         listingBadge.textContent = 'Available';
@@ -3181,6 +3361,133 @@ function _lemShowSlide(idx) {
   });
 }
 
+function _recalcSidebarModelsBadge() {
+  var sideBadge = document.getElementById('sidebarModelsBadge');
+  if (!sideBadge) return;
+  var cards = document.querySelectorAll('.prop-card-clickable');
+  var total = 0;
+  cards.forEach(function(c) {
+    var dCount = parseInt(c.getAttribute('data-pending-details-count') || '0', 10);
+    var pCount = parseInt(c.getAttribute('data-purchases-count') || '0', 10);
+    total += dCount + pCount;
+  });
+  if (total > 0) {
+    sideBadge.textContent = total;
+    sideBadge.style.display = '';
+  } else {
+    sideBadge.style.display = 'none';
+  }
+}
+
+function _syncPropertyDetailsBadge(propId, count) {
+  if (!propId) return;
+  var card = document.querySelector('.prop-card-clickable[data-prop-id="' + propId + '"]');
+  if (!card) return;
+  card.setAttribute('data-pending-details-count', count);
+
+  var indicatorsWrap = card.querySelector('.prop-card-indicators-top');
+  if (!indicatorsWrap) {
+    var imgWrap = card.querySelector('.prop-card-img-wrap');
+    if (imgWrap) {
+      indicatorsWrap = document.createElement('div');
+      indicatorsWrap.className = 'prop-card-indicators-top';
+      imgWrap.insertBefore(indicatorsWrap, imgWrap.firstChild);
+    }
+  }
+  if (indicatorsWrap) {
+    var chip = indicatorsWrap.querySelector('.chip-blue');
+    if (count > 0) {
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'prop-indicator-chip chip-blue';
+        indicatorsWrap.appendChild(chip);
+      }
+      chip.innerHTML = '<i class="fas fa-file-lines me-1"></i>' + count + ' Detail Request' + (count > 1 ? 's' : '');
+      chip.title = count + ' Pending Detail Request' + (count > 1 ? 's' : '');
+    } else if (chip) {
+      chip.remove();
+    }
+  }
+
+  var pendingBtn = card.querySelector('.pvm-full-details-btn');
+  if (pendingBtn) {
+    var btnBadge = pendingBtn.querySelector('.pvm-pending-badge');
+    if (count > 0) {
+      if (!btnBadge) {
+        btnBadge = document.createElement('span');
+        btnBadge.className = 'badge bg-primary rounded-pill ms-1 prop-btn-badge pvm-pending-badge';
+        pendingBtn.appendChild(btnBadge);
+      }
+      btnBadge.textContent = count;
+    } else if (btnBadge) {
+      btnBadge.remove();
+    }
+  }
+
+  _recalcSidebarModelsBadge();
+}
+
+function _syncPropertyPurchaseBadge(propId, pendingPurchasesCount, totalCandidatesCount) {
+  if (!propId) return;
+  var card = document.querySelector('.prop-card-clickable[data-prop-id="' + propId + '"]');
+  if (!card) return;
+  card.setAttribute('data-purchases-count', pendingPurchasesCount);
+  if (totalCandidatesCount !== undefined) {
+    card.setAttribute('data-purchase-candidates-count', totalCandidatesCount);
+  }
+
+  var indicatorsWrap = card.querySelector('.prop-card-indicators-top');
+  if (!indicatorsWrap) {
+    var imgWrap = card.querySelector('.prop-card-img-wrap');
+    if (imgWrap) {
+      indicatorsWrap = document.createElement('div');
+      indicatorsWrap.className = 'prop-card-indicators-top';
+      imgWrap.insertBefore(indicatorsWrap, imgWrap.firstChild);
+    }
+  }
+  if (indicatorsWrap) {
+    var chip = indicatorsWrap.querySelector('.chip-green');
+    if (pendingPurchasesCount > 0) {
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'prop-indicator-chip chip-green';
+        indicatorsWrap.appendChild(chip);
+      }
+      chip.innerHTML = '<i class="fas fa-file-signature me-1"></i>' + pendingPurchasesCount + ' Purchase Request' + (pendingPurchasesCount > 1 ? 's' : '');
+      chip.title = pendingPurchasesCount + ' Purchase Request' + (pendingPurchasesCount > 1 ? 's' : '');
+    } else if (chip) {
+      chip.remove();
+    }
+  }
+
+  var purchaseBtn = card.querySelector('.pvm-purchase-list-btn');
+  if (purchaseBtn) {
+    var btnBadge = purchaseBtn.querySelector('.pvm-purchase-badge');
+    if (pendingPurchasesCount > 0) {
+      if (!btnBadge) {
+        btnBadge = document.createElement('span');
+        btnBadge.className = 'badge bg-success rounded-pill ms-1 prop-btn-badge pvm-purchase-badge';
+        purchaseBtn.appendChild(btnBadge);
+      }
+      btnBadge.className = 'badge bg-success rounded-pill ms-1 prop-btn-badge pvm-purchase-badge';
+      btnBadge.textContent = pendingPurchasesCount;
+    } else if (totalCandidatesCount > 0) {
+      if (!btnBadge) {
+        btnBadge = document.createElement('span');
+        btnBadge.className = 'badge bg-secondary rounded-pill ms-1 prop-btn-badge pvm-purchase-badge';
+        purchaseBtn.appendChild(btnBadge);
+      }
+      btnBadge.className = 'badge bg-secondary rounded-pill ms-1 prop-btn-badge pvm-purchase-badge';
+      btnBadge.textContent = totalCandidatesCount;
+      btnBadge.title = totalCandidatesCount + ' candidate' + (totalCandidatesCount > 1 ? 's' : '') + ' in purchase list';
+    } else if (btnBadge) {
+      btnBadge.remove();
+    }
+  }
+
+  _recalcSidebarModelsBadge();
+}
+
 function _openPendingDetailsForProperty(propId, propName) {
   _pendingDetailsState.propertyId = propId;
   _pendingDetailsState.propertyName = propName || 'Property';
@@ -3217,6 +3524,10 @@ function _openPurchaseListForProperty(propId, propName) {
       if (!data || !data.ok) throw new Error((data && data.error) || 'Unable to load purchase list.');
       var rows = Array.isArray(data.rows) ? data.rows : [];
       _purchaseListState.rows = rows;
+      var _pendingPurchasesCnt = rows.filter(function (r) {
+        return r.purchase_form_submitted && !r.is_sold && r.purchase_status !== 'rejected';
+      }).length;
+      _syncPropertyPurchaseBadge(_purchaseListState.propertyId, _pendingPurchasesCnt, rows.length);
       if (nameEl) nameEl.textContent = data.property_name || _purchaseListState.propertyName;
       if (summaryEl) summaryEl.textContent = rows.length + ' candidate' + (rows.length === 1 ? '' : 's');
 
@@ -3245,18 +3556,26 @@ function _openPurchaseListForProperty(propId, propName) {
           purchaseLabel = 'Rejected';
           purchaseCls = 'badge-not-qualified';
         }
+        var clientId = row.client_id;
+        var clientDisplay = clientId
+          ? '<a href="javascript:void(0)" class="fw-semibold text-decoration-none purchase-list-client-btn text-dark" data-client-id="' + clientId + '" title="View Full Client Account Details">'
+            + '<i class="fas fa-user-circle text-primary me-1"></i>' + _escHtml(row.client_name || 'Client')
+            + '</a>'
+          : '<span class="fw-semibold">' + _escHtml(row.client_name || 'Client') + '</span>';
+
         tr.innerHTML = ''
-          + '<td>' + _escHtml(row.client_name || 'Client') + '</td>'
+          + '<td>' + clientDisplay + '</td>'
           + '<td>' + _escHtml(row.preferred_date || '—') + '</td>'
           + '<td>' + _escHtml(formText) + '</td>'
           + '<td><span class="sqh-badge ' + statusCls + '">' + _escHtml(status.charAt(0).toUpperCase() + status.slice(1)) + '</span></td>'
           + '<td><span class="sqh-badge ' + purchaseCls + '">' + _escHtml(purchaseLabel) + '</span></td>'
           + '<td>'
           + '  <div class="d-flex gap-2 flex-nowrap">'
-          + '    <button type="button" class="btn btn-sm btn-outline-blue purchase-list-view-form-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '"' + (row.can_view_form ? '' : ' disabled') + '>'
+          + (clientId ? '    <button type="button" class="btn btn-sm btn-outline-secondary purchase-list-client-btn" data-client-id="' + clientId + '" title="View Full Client Account Details"><i class="fas fa-user"></i></button>' : '')
+          + '    <button type="button" class="btn btn-sm btn-outline-blue purchase-list-view-form-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '"' + (row.can_view_form ? '' : ' disabled') + ' title="View Buyer Information Form">'
           + '      <i class="fas fa-eye me-1"></i>'
           + '    </button>'
-          + '    <button type="button" class="btn btn-sm btn-outline-crimson purchase-list-delete-form-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '"' + (row.can_view_form ? '' : ' disabled') + '>'
+          + '    <button type="button" class="btn btn-sm btn-outline-crimson purchase-list-delete-form-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '"' + (row.can_view_form ? '' : ' disabled') + ' title="Delete Form">'
           + '      <i class="fas fa-trash me-1"></i>'
           + '    </button>'
           + '  </div>'
@@ -3484,6 +3803,10 @@ function _openPurchaseFormView(tripId) {
   var statusBadgeEl = document.getElementById('purchaseFormStatusBadge');
   var clientEl = document.getElementById('purchaseFormViewClient');
   var submittedEl = document.getElementById('purchaseFormViewSubmittedAt');
+  var viewClientBtn = document.getElementById('buyerInfoViewClientBtn');
+  if (viewClientBtn) {
+    viewClientBtn.setAttribute('data-client-id', row.client_id || '');
+  }
   if (tripRefEl) tripRefEl.textContent = 'Trip #' + String(row.trip_id || '');
   if (clientEl) clientEl.textContent = row.client_name || 'Client';
   if (submittedEl) submittedEl.textContent = row.purchase_form_label || 'Submitted';
@@ -3916,6 +4239,21 @@ _bind('purchaseFormSoldConfirmBtn', 'click', function() {
   });
 })();
 
+(function initPurchaseFormViewModalReturnToList() {
+  var viewModalEl = document.getElementById('purchaseFormViewModal');
+  if (!viewModalEl) return;
+  viewModalEl.addEventListener('hidden.bs.modal', function () {
+    if (_purchaseSoldConfirmState.returnToView || _purchaseFormActionState.returnTo || _udmReturnModalId) {
+      return;
+    }
+    if (_purchaseListState.propertyId) {
+      setTimeout(function () {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('purchaseListModal')).show();
+      }, 120);
+    }
+  });
+})();
+
 function _openAdminEditPropertyModal(d) {
   if (!d) return;
   _pvmCurrentData = d;
@@ -3924,6 +4262,13 @@ function _openAdminEditPropertyModal(d) {
   var cleanNumericText = function (val, fallback) {
     if (val === undefined || val === null || val === '') return fallback;
     return String(val).replace(/,/g, '');
+  };
+  var formatCurrencyField = function (val) {
+    if (val === undefined || val === null || val === '') return '';
+    var s = String(val).trim();
+    if (s === '0' || s === '0.00') return '';
+    if (/\.00$/.test(s)) s = s.slice(0, -3);
+    return (typeof sqhFormatNumericValue === 'function') ? sqhFormatNumericValue(s) : s;
   };
   var setVal = function (id, val) {
     var el = document.getElementById(id);
@@ -3975,21 +4320,21 @@ function _openAdminEditPropertyModal(d) {
   setVal('ep_barangay_name', d.propBarangayName || '');
   document.getElementById('ep_prop_type').value = d.propType || '';
   document.getElementById('ep_unit_type').value = d.propUnitType || '';
-  document.getElementById('ep_price').value = (d.propPrice || '').toString().replace(/,/g, '');
+  document.getElementById('ep_price').value = formatCurrencyField(d.propPrice);
   document.getElementById('ep_promo_discount_rate').value = cleanNumericText(d.propPromoDiscountRate, '0');
-  document.getElementById('ep_reservation_fee').value = cleanNumericText(d.propReservationFee, '0');
+  document.getElementById('ep_reservation_fee').value = formatCurrencyField(d.propReservationFee);
   document.getElementById('ep_downpayment_rate').value = cleanNumericText(d.propDownpaymentRate, '0');
   document.getElementById('ep_downpayment_terms_months').value = cleanNumericText(d.propDownpaymentTermsMonths, '0');
   document.getElementById('ep_loanable_percentage').value = cleanNumericText(d.propLoanablePercentage, '0');
   document.getElementById('ep_vat_rate').value = cleanNumericText(d.propVatRate, '0');
   document.getElementById('ep_lmf_rate').value = cleanNumericText(d.propLmfRate, '0');
-  var _epRateFallback = ((document.getElementById('acp_annual_interest_rate') || {}).value || '').trim() || '8.50';
+  var _epRateFallback = ((document.getElementById('acp_annual_interest_rate') || {}).value || '').trim() || '7.50';
   document.getElementById('ep_annual_interest_rate').value = cleanNumericText(d.propAnnualInterestRate, _epRateFallback);
   document.getElementById('ep_bedrooms').value = d.propBedrooms || '0';
   document.getElementById('ep_bathrooms').value = d.propBathrooms || '0';
   document.getElementById('ep_storeys').value = d.propStoreys || '1';
-  document.getElementById('ep_floor_area').value = d.propFloorArea || '';
-  document.getElementById('ep_lot_area').value = d.propLotArea || '';
+  document.getElementById('ep_floor_area').value = formatCurrencyField(d.propFloorArea);
+  document.getElementById('ep_lot_area').value = formatCurrencyField(d.propLotArea);
   document.getElementById('ep_description').value = d.propDescription || '';
   document.getElementById('ep_subdivision').value = d.propSubdivisionId || '';
   document.getElementById('ep_unit_id').value = d.propUnitId || '';
@@ -3997,10 +4342,28 @@ function _openAdminEditPropertyModal(d) {
   _epBlockLotCheckTicket += 1;
   _setEpBlockLotError('');
 
-  var listing = (d.propListingStatus || '').toLowerCase();
-  var listingBadge = listing === 'sold'
-    ? '<span class="sqh-badge badge-not-qualified">Sold</span>'
-    : '<span class="sqh-badge badge-qualified">Available</span>';
+  var listing = (d.propListingStatus || 'available').toLowerCase();
+  var epStatusEl = document.getElementById('ep_status');
+  if (epStatusEl) {
+    epStatusEl.value = (listing === 'reserved' || listing === 'sold') ? listing : 'available';
+    epStatusEl.onchange = function () {
+      var val = epStatusEl.value;
+      if (val === 'sold') {
+        document.getElementById('lemStatusBadge').innerHTML = '<span class="sqh-badge badge-sold">Sold</span>';
+      } else if (val === 'reserved') {
+        document.getElementById('lemStatusBadge').innerHTML = '<span class="sqh-badge badge-conditional">Reserved</span>';
+      } else {
+        document.getElementById('lemStatusBadge').innerHTML = '<span class="sqh-badge badge-qualified">Available</span>';
+      }
+    };
+  }
+
+  var listingBadge = '<span class="sqh-badge badge-qualified">Available</span>';
+  if (listing === 'sold') {
+    listingBadge = '<span class="sqh-badge badge-sold">Sold</span>';
+  } else if (listing === 'reserved') {
+    listingBadge = '<span class="sqh-badge badge-conditional">Reserved</span>';
+  }
   document.getElementById('lemStatusBadge').innerHTML = listingBadge;
 
   var chips = '';
@@ -4064,7 +4427,7 @@ function _openAdminEditPropertyModal(d) {
   });
 
   var soldWarn = document.getElementById('editPropSoldWarn');
-  if (soldWarn) soldWarn.classList.toggle('d-none', !isSoldListing);
+  if (soldWarn) soldWarn.classList.add('d-none');
 
   var editModal = document.getElementById('editPropertyModal');
   if (editModal) {
@@ -4073,8 +4436,8 @@ function _openAdminEditPropertyModal(d) {
         return;
       }
       if (el.type === 'hidden') return;
-      el.disabled = isSoldListing;
-      el.classList.toggle('sqh-disabled-field', isSoldListing);
+      el.disabled = false;
+      el.classList.remove('sqh-disabled-field');
     });
   }
 
@@ -4085,34 +4448,34 @@ function _openAdminEditPropertyModal(d) {
   });
 
   var browseBtn = document.getElementById('ep_images_browse_btn');
-  if (browseBtn) browseBtn.disabled = isSoldListing;
+  if (browseBtn) browseBtn.disabled = false;
 
   var saveBtn = document.getElementById('editPropBtn');
   if (saveBtn) {
-    saveBtn.disabled = isSoldListing;
-    saveBtn.classList.toggle('d-none', isSoldListing);
+    saveBtn.disabled = false;
+    saveBtn.classList.remove('d-none');
   }
 
   var closeBtn = document.getElementById('editPropCloseBtn');
   if (closeBtn) {
-    closeBtn.textContent = isSoldListing ? 'Close' : 'Cancel';
-    closeBtn.classList.toggle('ms-auto', isSoldListing);
+    closeBtn.textContent = 'Cancel';
+    closeBtn.classList.remove('ms-auto');
   }
 
   var footerActions = document.getElementById('editPropFooterActions');
   if (footerActions) {
-    footerActions.classList.toggle('ms-auto', isSoldListing);
+    footerActions.classList.remove('ms-auto');
   }
 
   var delBtnUi = document.getElementById('lemDeleteBtn');
   if (delBtnUi) {
-    delBtnUi.disabled = isSoldListing;
-    delBtnUi.classList.toggle('d-none', isSoldListing);
+    delBtnUi.disabled = false;
+    delBtnUi.classList.remove('d-none');
   }
 
   imgWrap.querySelectorAll('.sub-img-tile-del').forEach(function (btn) {
-    btn.classList.toggle('d-none', isSoldListing);
-    btn.disabled = isSoldListing;
+    btn.classList.remove('d-none');
+    btn.disabled = false;
   });
 
   var delBtn = document.getElementById('lemDeleteBtn');
@@ -4143,7 +4506,15 @@ function _openAdminEditPropertyModal(d) {
     barangayName: d.propBarangayName || ''
   });
 
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('editPropertyModal')).show();
+  var editModalEl = document.getElementById('editPropertyModal');
+  if (typeof sqhBindNumericFormatting === 'function' && editModalEl) {
+    sqhBindNumericFormatting(editModalEl);
+  }
+  if (typeof sqhBindPercentageInputs === 'function' && editModalEl) {
+    sqhBindPercentageInputs(editModalEl);
+  }
+
+  bootstrap.Modal.getOrCreateInstance(editModalEl).show();
 }
 
 _bind('lemPrev', 'click', function(e) { e.stopPropagation(); _lemShowSlide(_lemIdx - 1); });
@@ -4158,7 +4529,28 @@ document.addEventListener('click', function(e) {
   var purchaseBtn = e.target.closest('.pvm-purchase-list-btn');
   var purchaseViewBtn = e.target.closest('.purchase-list-view-form-btn');
   var purchaseDeleteBtn = e.target.closest('.purchase-list-delete-form-btn');
+  var purchaseClientBtn = e.target.closest('.purchase-list-client-btn');
+  var pendingClientBtn = e.target.closest('.pd-view-client-btn');
+  var buyerClientBtn = e.target.closest('#buyerInfoViewClientBtn');
   var inModal = !!e.target.closest('#editPropertyModal');
+  if (pendingClientBtn) {
+    e.preventDefault();
+    var pClientId = parseInt(pendingClientBtn.getAttribute('data-client-id'), 10);
+    if (pClientId) openUserModal(pClientId, 'pendingDetailsModal');
+    return;
+  }
+  if (purchaseClientBtn) {
+    e.preventDefault();
+    var plClientId = parseInt(purchaseClientBtn.getAttribute('data-client-id'), 10);
+    if (plClientId) openUserModal(plClientId, 'purchaseListModal');
+    return;
+  }
+  if (buyerClientBtn) {
+    e.preventDefault();
+    var bClientId = parseInt(buyerClientBtn.getAttribute('data-client-id'), 10) || (_purchaseFormViewState.row ? _purchaseFormViewState.row.client_id : null);
+    if (bClientId) openUserModal(bClientId, 'purchaseFormViewModal');
+    return;
+  }
   if (purchaseDeleteBtn) {
     _openPurchaseFormActionConfirm('delete', purchaseDeleteBtn.dataset.tripId);
     return;
@@ -4250,6 +4642,10 @@ function initAdminEditPropertyPsgc() {
         _subFillSelect(provinceSel, items, '-- Select --');
         _subResetSelect(citySel, '-- Select --');
         _subResetSelect(brgySel, '-- Select --');
+        if (items && items.length === 1) {
+          provinceSel.value = items[0].code;
+          provinceSel.dispatchEvent(new Event('change'));
+        }
         _syncAdminEditPropertyLocation();
       });
   });
@@ -4338,9 +4734,13 @@ function _prefillAdminEditPropertyPsgc(codes) {
       return Promise.resolve();
     }
     return _subGetItems('/api/psgc/provinces?region_code=' + encodeURIComponent(regionCode)).then(function (provinces) {
-      _subFillSelect(provinceSel, provinces, '-- Select --', provinceCode);
-      var cityQ = provinceCode
-        ? ('province_code=' + encodeURIComponent(provinceCode))
+      var effProvinceCode = provinceCode;
+      if (!effProvinceCode && provinces && provinces.length === 1) {
+        effProvinceCode = provinces[0].code;
+      }
+      _subFillSelect(provinceSel, provinces, '-- Select --', effProvinceCode);
+      var cityQ = effProvinceCode
+        ? ('province_code=' + encodeURIComponent(effProvinceCode))
         : ('region_code=' + encodeURIComponent(regionCode));
       return _subGetItems('/api/psgc/cities?' + cityQ).then(function (cities) {
         _subFillSelect(citySel, cities, '-- Select --', citymunCode);
@@ -4455,6 +4855,9 @@ _bind('editPropBtn', 'click', function() {
     fd.append('lot_area', sqhCleanNumeric(document.getElementById('ep_lot_area').value));
     fd.append('subdivision_id', subdivisionVal);
     fd.append('unit_id', document.getElementById('ep_unit_id').value || '');
+    if (document.getElementById('ep_status')) {
+      fd.append('status', document.getElementById('ep_status').value || 'available');
+    }
     fd.append('description', document.getElementById('ep_description').value || '');
     document.querySelectorAll('#ep_images_wrap input[name="existing_img"]').forEach(function(inp) {
       fd.append('existing_images', inp.value);
@@ -4532,6 +4935,10 @@ function _loadPendingDetailsRequests() {
         return;
       }
       var rows = Array.isArray(res.data.requests) ? res.data.requests : [];
+      var _pendingDetailsCnt = rows.filter(function (r) {
+        return (r.status || '').toLowerCase() === 'pending';
+      }).length;
+      _syncPropertyDetailsBadge(propId, _pendingDetailsCnt);
       if (summaryEl) summaryEl.textContent = rows.length + ' request' + (rows.length === 1 ? '' : 's');
       if (emptyEl) emptyEl.classList.toggle('d-none', rows.length > 0);
       if (!bodyEl) return;
@@ -4543,16 +4950,28 @@ function _loadPendingDetailsRequests() {
         var status = (row.status || '').toLowerCase();
         var note = row.agent_note ? _escHtml(row.agent_note) : '—';
         var actions = '';
+        var clientId = row.client_id;
+        var viewClientBtn = clientId
+          ? '<button type="button" class="btn btn-sm btn-outline-secondary me-1 pd-view-client-btn" data-client-id="' + clientId + '" title="View Client Information"><i class="fas fa-user"></i></button>'
+          : '';
         if (status === 'pending' && row.request_id) {
-          actions += '<button type="button" class="btn btn-sm btn-lime me-1 pd-approve-btn" data-request-id="' + row.request_id + '"><i class="fas fa-check"></i></button>';
-          actions += '<button type="button" class="btn btn-sm btn-outline-crimson pd-reject-btn" data-request-id="' + row.request_id + '"><i class="fas fa-times"></i></button>';
+          actions += viewClientBtn;
+          actions += '<button type="button" class="btn btn-sm btn-lime me-1 pd-approve-btn" data-request-id="' + row.request_id + '" title="Approve Request"><i class="fas fa-check"></i></button>';
+          actions += '<button type="button" class="btn btn-sm btn-outline-crimson pd-reject-btn" data-request-id="' + row.request_id + '" title="Reject Request"><i class="fas fa-times"></i></button>';
         } else if (status === 'approved' || status === 'rejected') {
-          actions += '<button type="button" class="btn btn-sm btn-outline-crimson pd-delete-btn" data-history-id="' + row.id + '"><i class="fas fa-trash"></i></button>';
+          actions += viewClientBtn;
+          actions += '<button type="button" class="btn btn-sm btn-outline-crimson pd-delete-btn" data-history-id="' + row.id + '" title="Delete Request"><i class="fas fa-trash"></i></button>';
         } else {
-          actions = '<span class="text-muted small">—</span>';
+          actions = viewClientBtn || '<span class="text-muted small">—</span>';
         }
+        var clientDisplay = clientId
+          ? '<a href="javascript:void(0)" class="fw-semibold text-decoration-none pd-view-client-btn text-dark" data-client-id="' + clientId + '" title="View Client Information">'
+            + '<i class="fas fa-user-circle text-primary me-1"></i>' + _escHtml(row.client_name || 'Client')
+            + '</a>'
+          : '<span class="fw-semibold">' + _escHtml(row.client_name || 'Client') + '</span>';
+
         return '<tr>'
-          + '<td class="fw-semibold">' + _escHtml(row.client_name || 'Client') + '</td>'
+          + '<td>' + clientDisplay + '</td>'
           + '<td>' + _escHtml(row.created_at || '—') + '</td>'
           + '<td>' + _pendingDetailsStatusBadge(status) + '</td>'
           + '<td class="small">' + note + '</td>'
@@ -5274,7 +5693,7 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
       if (empty) empty.remove();
       var tbody = document.getElementById('tdTableBody');
       var dti    = payload.gross_income > 0 ? (payload.monthly_loans / payload.gross_income * 100) : 0;
-      var dtiCls = dti < 35 ? 'text-success' : (dti <= 42 ? 'text-warning' : 'text-danger');
+      var dtiCls = dti <= 30 ? 'text-success' : (dti <= 42 ? 'text-warning' : 'text-danger');
       var outBadge = payload.outcome === 'Qualified' ? 'badge-qualified' : (payload.outcome === 'Conditionally Qualified' ? 'badge-conditional' : 'badge-not-qualified');
       var outTxt   = payload.outcome === 'Conditionally Qualified' ? 'Conditional' : payload.outcome;
       var rowN = tbody.querySelectorAll('tr[id^="td-row-"]').length + 1;
@@ -5409,7 +5828,7 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
       if (!row) return;
       var rec  = d.record;
       var dtiR = parseFloat(rec.dti_ratio || 0);
-      var dtiC = dtiR < 35 ? 'text-success' : (dtiR <= 42 ? 'text-warning' : 'text-danger');
+      var dtiC = dtiR <= 30 ? 'text-success' : (dtiR <= 42 ? 'text-warning' : 'text-danger');
       var outB = rec.outcome === 'Qualified' ? 'badge-qualified' : (rec.outcome === 'Conditionally Qualified' ? 'badge-conditional' : 'badge-not-qualified');
       var outT = rec.outcome === 'Conditionally Qualified' ? 'Conditional' : rec.outcome;
       row.dataset.outcome    = rec.outcome;
@@ -5452,14 +5871,38 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
       method: 'POST',
       headers: {'X-CSRFToken': document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').content : ''}
     })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+      if (!r.ok) {
+        throw new Error('Server returned ' + r.status);
+      }
+      return r.json();
+    })
     .then(function(d) {
       if (retrainBtn) { retrainBtn.disabled = false; retrainBtn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Retrain'; }
-      if (d.meta) _updateModelBar(d.meta);
-      _loadC50SyncStatus();
+      if (d && d.success && d.meta && d.meta.trained) {
+        showToast('C5.0 Model retrained successfully! (' + d.meta.n_samples + ' records, Tree Depth: ' + d.meta.tree_depth + ')', 'success');
+        var recEl = document.getElementById('c50StatRecords');
+        if (recEl) recEl.textContent = d.meta.n_samples;
+        var depthEl = document.getElementById('c50StatDepth');
+        if (depthEl) depthEl.textContent = d.meta.tree_depth;
+        var statusEl = document.getElementById('c50StatEngineStatus');
+        if (statusEl) statusEl.textContent = 'C5.0 Model';
+      } else if (d && d.error) {
+        showToast(d.error, 'danger');
+      } else {
+        showToast('Retrain completed, but insufficient training data was found.', 'warning');
+      }
+      try {
+        if (d && d.meta) _updateModelBar(d.meta);
+        _loadC50SyncStatus();
+      } catch (err) {
+        console.warn('Post-retrain UI update warning:', err);
+      }
     })
-    .catch(function() {
+    .catch(function(err) {
+      console.error('Retrain error:', err);
       if (retrainBtn) { retrainBtn.disabled = false; retrainBtn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Retrain'; }
+      showToast('An error occurred while retraining the model.', 'danger');
     });
   });
 
@@ -5479,11 +5922,13 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
     if (modal) modal.hide();
     if (!btn) return;
 
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Seeding…';
-    fetch('/admin/c50/seed', {
+    fetch('/admin/c50/seed?replace=true', {
       method: 'POST',
-      headers: {'X-CSRFToken': document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').content : ''}
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]') ? document.querySelector('meta[name="csrf-token"]').content : ''
+      },
+      body: JSON.stringify({ replace: true })
     })
     .then(function(r) { return r.json(); })
     .then(function(d) {
@@ -5499,7 +5944,7 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
       }
       btn.remove();
       if (d.meta) _updateModelBar(d.meta);
-      showToast('Seeded ' + d.seeded + ' records. Model trained with ' + (d.meta && d.meta.train_accuracy ? d.meta.train_accuracy + '% accuracy' : 'success') + '. Refreshing page…', 'success');
+      showToast('Seeded ' + d.seeded + ' records. Model trained successfully. Refreshing page…', 'success');
       location.reload();
     })
     .catch(function() {
@@ -5616,19 +6061,22 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
 
   /* -- Model status bar updater -- */
   function _updateModelBar(meta) {
-    var bar = document.querySelector('.c50-model-dot');
+    var bar = document.getElementById('topbar_model_dot') || document.querySelector('.c50-model-dot');
     if (!bar) return;
+    var statusEl = document.getElementById('topbar_model_status') || bar.nextElementSibling;
     if (meta && meta.trained) {
       bar.classList.remove('untrained');
       bar.classList.add('trained');
-      var info = bar.nextElementSibling;
-      if (info) {
-        info.querySelector('.fw-bold.small').textContent =
-          'C5.0 Model Active — ' + meta.n_samples + ' training records • ' + meta.train_accuracy + '% accuracy • depth ' + meta.tree_depth;
-        var sub = info.querySelector('.text-muted');
-        if (sub) sub.innerHTML = '<span class="text-success">' + meta.n_qualified + ' Qualified</span> &nbsp;•&nbsp; '
-          + '<span class="text-warning">' + meta.n_conditional + ' Conditional</span> &nbsp;•&nbsp; '
-          + '<span class="text-danger">' + meta.n_not_qualified + ' Not Qualified</span>';
+      if (statusEl) {
+        statusEl.textContent = 'C5.0 Active — ' + (meta.n_samples || 0) + ' records • depth ' + (meta.tree_depth || 3);
+        statusEl.style.color = 'var(--clr-accent-dk)';
+      }
+    } else {
+      bar.classList.remove('trained');
+      bar.classList.add('untrained');
+      if (statusEl) {
+        statusEl.textContent = 'C5.0 — Untrained';
+        statusEl.style.color = 'var(--clr-muted)';
       }
     }
   }
@@ -5672,11 +6120,13 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
         contact_phone:  document.getElementById('set_contact_phone').value.trim(),
         office_address: document.getElementById('set_office_address').value.trim(),
       };
+      var evSwitch = document.getElementById('set_email_verification_enabled');
       var secPayload = {
         max_login_attempts:   parseInt(document.getElementById('set_max_login_attempts').value) || 5,
         max_forgot_password_attempts: parseInt(document.getElementById('set_max_forgot_password_attempts').value) || 5,
         session_timeout_mins: parseInt(document.getElementById('set_session_timeout_mins').value) || 60,
         min_password_length:  parseInt(document.getElementById('set_min_password_length').value) || 8,
+        email_verification_enabled: evSwitch ? evSwitch.checked : true,
       };
 
       var postJSON = function (url, data) {
@@ -5757,7 +6207,7 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
       document.getElementById('si_subdivisions').textContent = d.total_subdivisions;
       document.getElementById('si_assessments').textContent  = d.total_assessments;
       document.getElementById('si_training').textContent     = d.total_training;
-      document.getElementById('si_model_acc').textContent    = d.model_trained ? d.model_accuracy + '%' : 'N/A';
+      document.getElementById('si_model_acc').textContent    = d.model_trained ? 'Active' : 'N/A';
       var sizeEl = document.getElementById('backupDbSize');
       if (sizeEl) sizeEl.textContent = d.db_size || '—';
 
@@ -5768,7 +6218,7 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
       if (d.model_trained) {
         if (dot)    { dot.classList.remove('untrained'); dot.classList.add('trained'); }
         if (topDot) { topDot.classList.remove('untrained'); topDot.classList.add('trained'); }
-        if (topStatus) { topStatus.textContent = 'C5.0 Active — ' + d.model_accuracy + '% accuracy'; topStatus.style.color = 'var(--clr-accent-dk)'; }
+        if (topStatus) { topStatus.textContent = 'C5.0 Active — ' + (d.total_training || '80') + ' records'; topStatus.style.color = 'var(--clr-accent-dk)'; }
       } else {
         if (dot)    { dot.classList.remove('trained'); dot.classList.add('untrained'); }
         if (topDot) { topDot.classList.remove('trained'); topDot.classList.add('untrained'); }
@@ -6838,6 +7288,10 @@ function initAdminCreatePropertyPsgc() {
         _subFillSelect(provinceSel, items, '-- Select --');
         _subResetSelect(citySel, '-- Select --');
         _subResetSelect(brgySel, '-- Select --');
+        if (items && items.length === 1) {
+          provinceSel.value = items[0].code;
+          provinceSel.dispatchEvent(new Event('change'));
+        }
         _syncAdminCreatePropertyLocation();
       })
       .catch(function () { showToast('Unable to load provinces right now.', 'warning'); });
@@ -6923,7 +7377,34 @@ var _pendingAcpFiles = [];
       addressErrEl.textContent = '';
       addressErrEl.classList.remove('sqh-err-visible');
     }
+    [
+      'acp_name', 'acp_unit_id', 'acp_subdivision', 'acp_price',
+      'acp_promo_discount_rate', 'acp_reservation_fee',
+      'acp_downpayment_rate', 'acp_downpayment_terms_months',
+      'acp_loanable_percentage', 'acp_vat_rate', 'acp_lmf_rate',
+      'acp_bedrooms', 'acp_bathrooms', 'acp_storeys',
+      'acp_floor_area', 'acp_lot_area', 'acp_description',
+      'acp_full_address', 'acp_street', 'acp_block', 'acp_lot_no'
+    ].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    var statusEl = document.getElementById('acp_status');
+    if (statusEl) statusEl.value = 'available';
+    var rateEl = document.getElementById('acp_annual_interest_rate');
+    if (rateEl && !rateEl.value) {
+      rateEl.value = rateEl.getAttribute('value') || '7.50';
+    }
   }
+
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    resetAcpFormState();
+    var errEl = document.getElementById('adminCreatePropError');
+    if (errEl) {
+      errEl.textContent = '';
+      errEl.classList.add('d-none');
+    }
+  });
 
   function _setAcpBlockLotError(msg) {
     var blockEl = document.getElementById('acp_full_address');
@@ -7240,8 +7721,16 @@ var _pendingAcpFiles = [];
       + ' data-prop-barangay-code="' + _escapeHtml(prop.barangay_code || '') + '"'
       + ' data-prop-barangay-name="' + _escapeHtml(prop.barangay_name || '') + '"'
       + ' data-prop-unit-id="' + _escapeHtml(prop.unit_id || '') + '"'
+      + ' data-prop-unit-type="' + _escapeHtml(prop.unit_type || '') + '"'
       + ' data-prop-type="' + _escapeHtml(propType) + '"'
       + ' data-prop-price="' + _escapeHtml(priceNum ? priceNum.toLocaleString('en-PH', { maximumFractionDigits: 0 }) : '0') + '"'
+      + ' data-prop-promo-discount-rate="' + _escapeHtml(prop.promo_discount_rate ?? '') + '"'
+      + ' data-prop-reservation-fee="' + _escapeHtml(prop.reservation_fee ? Number(prop.reservation_fee).toLocaleString('en-PH', { maximumFractionDigits: 0 }) : '') + '"'
+      + ' data-prop-downpayment-rate="' + _escapeHtml(prop.downpayment_rate ?? '') + '"'
+      + ' data-prop-downpayment-terms-months="' + _escapeHtml(prop.downpayment_terms_months ?? '') + '"'
+      + ' data-prop-loanable-percentage="' + _escapeHtml(prop.loanable_percentage ?? '') + '"'
+      + ' data-prop-vat-rate="' + _escapeHtml(prop.vat_rate ?? '') + '"'
+      + ' data-prop-lmf-rate="' + _escapeHtml(prop.lmf_rate ?? '') + '"'
       + ' data-prop-bedrooms="' + _escapeHtml(prop.bedrooms || '') + '"'
       + ' data-prop-bathrooms="' + _escapeHtml(prop.bathrooms || '') + '"'
       + ' data-prop-storeys="' + _escapeHtml(prop.storeys || '') + '"'
@@ -7254,8 +7743,14 @@ var _pendingAcpFiles = [];
       + ' data-prop-status="' + _escapeHtml(status) + '"'
       + ' data-prop-listing-status="' + _escapeHtml(listingStatus) + '"'
       + ' data-prop-images="' + _escapeHtml(imagesCsv) + '"'
-      + ' data-prop-annual-interest-rate="' + _escapeHtml(prop.annual_interest_rate ?? '') + '">'
+      + ' data-prop-annual-interest-rate="' + _escapeHtml(prop.annual_interest_rate ?? '') + '"'
+      + ' data-pending-details-count="' + parseInt(prop.pending_details_count || 0, 10) + '"'
+      + ' data-purchases-count="' + parseInt(prop.purchases_count || 0, 10) + '">'
       + '  <div class="prop-card-img-wrap">'
+      + '    <div class="prop-card-indicators-top">'
+      + (parseInt(prop.pending_details_count || 0, 10) > 0 ? '      <span class="prop-indicator-chip chip-blue" title="' + parseInt(prop.pending_details_count || 0, 10) + ' Pending Detail Request' + (parseInt(prop.pending_details_count || 0, 10) > 1 ? 's' : '') + '"><i class="fas fa-file-lines me-1"></i>' + parseInt(prop.pending_details_count || 0, 10) + ' Detail Request' + (parseInt(prop.pending_details_count || 0, 10) > 1 ? 's' : '') + '</span>' : '')
+      + (parseInt(prop.purchases_count || 0, 10) > 0 ? '      <span class="prop-indicator-chip chip-green" title="' + parseInt(prop.purchases_count || 0, 10) + ' Purchase Request' + (parseInt(prop.purchases_count || 0, 10) > 1 ? 's' : '') + '"><i class="fas fa-file-signature me-1"></i>' + parseInt(prop.purchases_count || 0, 10) + ' Purchase Request' + (parseInt(prop.purchases_count || 0, 10) > 1 ? 's' : '') + '</span>' : '')
+      + '    </div>'
       + (firstImg
           ? '    <img src="/uploads/' + _escapeHtml(firstImg) + '" alt="' + _escapeHtml(name) + '" class="prop-card-img">'
           : '    <div class="prop-card-img-placeholder"><i class="fas fa-home"></i></div>')
@@ -7288,7 +7783,8 @@ var _pendingAcpFiles = [];
       + '      <span>' + _escapeHtml(prop.created_at || '') + '</span>'
       + '    </div>'
       + '    <div class="prop-card-pending-details-wrap mt-2">'
-      + '      <button type="button" class="btn btn-sm btn-outline-blue px-3 pvm-full-details-btn"><i class="fas fa-file-lines me-1"></i>View Pending Details</button>'
+      + '      <button type="button" class="btn btn-sm btn-outline-blue px-3 pvm-full-details-btn position-relative" data-prop-id="' + _escapeHtml(prop.id) + '"><i class="fas fa-file-lines me-1"></i>View Pending Details' + (parseInt(prop.pending_details_count || 0, 10) > 0 ? ' <span class="badge bg-primary rounded-pill ms-1 prop-btn-badge pvm-pending-badge">' + parseInt(prop.pending_details_count || 0, 10) + '</span>' : '') + '</button>'
+      + '      <button type="button" class="btn btn-sm btn-outline-lime px-3 pvm-purchase-list-btn position-relative" data-prop-id="' + _escapeHtml(prop.id) + '"><i class="fas fa-list-check me-1"></i>View Purchase List' + (parseInt(prop.purchases_count || 0, 10) > 0 ? ' <span class="badge bg-success rounded-pill ms-1 prop-btn-badge pvm-purchase-badge">' + parseInt(prop.purchases_count || 0, 10) + '</span>' : '') + '</button>'
       + '    </div>'
       + '  </div>'
       + '</div>';
@@ -7524,6 +8020,7 @@ var _pendingAcpFiles = [];
     var lastName  = (document.getElementById('admin_prof_last_name')  || {}).value || '';
     var email     = (document.getElementById('admin_prof_email')       || {}).value || '';
     var username  = (document.getElementById('admin_prof_username')    || {}).value || '';
+    var oldPw     = (document.getElementById('admin_prof_old_password')    || {}).value || '';
     var newPw     = (document.getElementById('admin_prof_new_password')    || {}).value || '';
     var confirmPw = (document.getElementById('admin_prof_confirm_password') || {}).value || '';
 
@@ -7547,9 +8044,19 @@ var _pendingAcpFiles = [];
       if (errEl) { errEl.textContent = 'Username may contain only letters, numbers, dots, and underscores.'; errEl.classList.remove('d-none'); }
       return;
     }
-    if (newPw && newPw !== confirmPw) {
-      if (errEl) { errEl.textContent = 'Passwords do not match.'; errEl.classList.remove('d-none'); }
-      return;
+    if (newPw) {
+      if (!oldPw) {
+        if (errEl) { errEl.textContent = 'Current password is required to set a new password.'; errEl.classList.remove('d-none'); }
+        return;
+      }
+      if (newPw.length < 6) {
+        if (errEl) { errEl.textContent = 'New password must be at least 6 characters.'; errEl.classList.remove('d-none'); }
+        return;
+      }
+      if (newPw !== confirmPw) {
+        if (errEl) { errEl.textContent = 'Passwords do not match.'; errEl.classList.remove('d-none'); }
+        return;
+      }
     }
     if (errEl) errEl.classList.add('d-none');
     bootstrap.Modal.getOrCreateInstance(document.getElementById('adminSaveProfileModal')).show();
@@ -7565,6 +8072,7 @@ var _pendingAcpFiles = [];
     var email     = (document.getElementById('admin_prof_email')       || {}).value || '';
     var username  = (document.getElementById('admin_prof_username')    || {}).value || '';
     var contact   = (document.getElementById('admin_prof_contact')    || {}).value || '';
+    var oldPw     = (document.getElementById('admin_prof_old_password')    || {}).value || '';
     var newPw     = (document.getElementById('admin_prof_new_password')    || {}).value || '';
 
     saveBtn.disabled = true;
@@ -7580,6 +8088,7 @@ var _pendingAcpFiles = [];
         email:          email.trim(),
         username:       username.trim(),
         contact_number: contact.trim(),
+        old_password:   oldPw || null,
         new_password:   newPw || null,
       })
     })
@@ -7596,16 +8105,16 @@ var _pendingAcpFiles = [];
       document.querySelectorAll('.dash-topbar-name').forEach(function (el) { el.textContent = fullName; });
       var heroNameEl = document.getElementById('adminProfHeroName');
       if (heroNameEl) heroNameEl.textContent = fullName;
-      if (newPw) {
-        var npEl = document.getElementById('admin_prof_new_password');
-        var cpEl = document.getElementById('admin_prof_confirm_password');
-        if (npEl) npEl.value = '';
-        if (cpEl) cpEl.value = '';
-        ['adminProfPwLen','adminProfPwUpper','adminProfPwNum','adminProfPwSpecial'].forEach(function (id) {
-          var el = document.getElementById(id); if (!el) return;
-          el.classList.remove('pw-ok');
-        });
-      }
+      var opEl = document.getElementById('admin_prof_old_password');
+      var npEl = document.getElementById('admin_prof_new_password');
+      var cpEl = document.getElementById('admin_prof_confirm_password');
+      if (opEl) opEl.value = '';
+      if (npEl) npEl.value = '';
+      if (cpEl) cpEl.value = '';
+      ['adminProfPwLen','adminProfPwUpper','adminProfPwNum','adminProfPwSpecial'].forEach(function (id) {
+        var el = document.getElementById(id); if (!el) return;
+        el.classList.remove('pw-ok');
+      });
       window._adminProfDirty = false;
       if (typeof window._adminProfRefreshSnapshot === 'function') window._adminProfRefreshSnapshot();
       showToast('Profile saved successfully!', 'success');
@@ -7644,7 +8153,7 @@ var _pendingAcpFiles = [];
   var _pendingNav = null;
 
   var ADMIN_PROF_FIELDS = ['admin_prof_first_name', 'admin_prof_last_name', 'admin_prof_email', 'admin_prof_username', 'admin_prof_contact'];
-  var ADMIN_PROF_PW     = ['admin_prof_new_password', 'admin_prof_confirm_password'];
+  var ADMIN_PROF_PW     = ['admin_prof_old_password', 'admin_prof_new_password', 'admin_prof_confirm_password'];
 
   // Snapshot on load
   var _adminProfSnapshot = {};

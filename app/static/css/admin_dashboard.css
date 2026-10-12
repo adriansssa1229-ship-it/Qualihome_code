@@ -704,6 +704,45 @@
   padding: .15rem .5rem; border-radius: 20px;
   pointer-events: none;
 }
+/* ── Model card indicator chips (Detail Requests & Purchases) ── */
+.prop-card-indicators-top {
+  position: absolute;
+  top: .6rem;
+  left: .6rem;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  z-index: 2;
+  pointer-events: none;
+}
+.prop-indicator-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-2xs, 0.72rem);
+  font-weight: 700;
+  padding: .24rem .58rem;
+  border-radius: 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.28);
+  letter-spacing: .02em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.prop-indicator-chip.chip-blue {
+  background: #0284c7;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+}
+.prop-indicator-chip.chip-green {
+  background: #16a34a;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.35);
+}
+.prop-btn-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: .22em .55em;
+  vertical-align: middle;
+}
 .prop-card-icons {
   display: flex;
   flex-wrap: wrap;

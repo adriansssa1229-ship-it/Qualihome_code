@@ -12,35 +12,40 @@ echo  That's it!
 echo ============================================================
 echo.
 
-REM Check if Python is installed
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Python not found!
-    echo   Please install Python 3.10+ from https://www.python.org/
-    echo   Check "Add python.exe to PATH" during install
-    pause
-    exit /b
-)
-
 echo [1/4] Checking virtual environment...
-if not exist ".venv\Scripts\python.exe" (
+if exist ".venv\Scripts\python.exe" (
+    echo   .venv found.
+) else (
+    REM Check if Python or Py Launcher is available
+    py --version >nul 2>&1
+    if %errorlevel% equ 0 (
+        set "PY_CMD=py"
+    ) else (
+        python --version >nul 2>&1
+        if %errorlevel% equ 0 (
+            set "PY_CMD=python"
+        ) else (
+            echo [ERROR] Python not found!
+            echo   Please install Python 3.10+ from https://www.python.org/
+            echo   Check "Add python.exe to PATH" during install
+            pause
+            exit /b
+        )
+    )
     echo   Creating .venv (first time only, ~10 sec)...
-    python -m venv .venv
+    %PY_CMD% -m venv --system-site-packages .venv
     if %errorlevel% neq 0 (
         echo [ERROR] Failed to create venv
         pause
         exit /b
     )
-) else (
-    echo   .venv found
 )
 
 echo.
-echo [2/4] Installing requirements (first time takes 1-2 min)...
-".venv\Scripts\pip.exe" install -r requirements.txt
+echo [2/4] Checking requirements...
+".venv\Scripts\pip.exe" install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
 if %errorlevel% neq 0 (
-    echo [WARN] pip install had warnings, trying again...
-    ".venv\Scripts\pip.exe" install --no-cache-dir -r requirements.txt
+    echo [WARN] pip install had warnings, continuing...
 )
 
 echo.

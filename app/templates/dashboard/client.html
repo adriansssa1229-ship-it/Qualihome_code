@@ -13,7 +13,7 @@
 <script id="buyer-countries-config" type="application/json">{{ (country_options or [])|tojson }}</script>
 <script id="qm-live-config" type="application/json">{{ (live_meter_cfg or {})|tojson }}</script>
 <script src="{{ url_for('static', filename='js/admin_dashboard.js') }}"></script>
-<script src="{{ url_for('static', filename='js/client_dashboard.js') }}?v=2.0"></script>
+<script src="{{ url_for('static', filename='js/client_dashboard.js') }}?v=2.4"></script>
 <script>
 /* -- Pre-Qualification Assessment Modal Wizard --------------- */
 (function () {
@@ -29,7 +29,7 @@
   ];
 
   var qmLiveCfg = {
-    dti_qualified_max: 35,
+    dti_qualified_max: 30,
     dti_conditional_max: 42,
     min_tenure_months: 6,
     stability_scores: {
@@ -105,62 +105,8 @@
   /* -- Step 1 refs & validators -- */
   var qmGross      = document.getElementById('qm-gross');
   var qmDebt       = document.getElementById('qm-debt');
-  var qmUmid       = document.getElementById('qm-umid');
-  var qmTin        = document.getElementById('qm-tin');
   var qmGrossErr   = document.getElementById('qm-gross-err');
   var qmDebtErr    = document.getElementById('qm-debt-err');
-  var qmUmidErr    = document.getElementById('qm-umid-err');
-  var qmTinErr     = document.getElementById('qm-tin-err');
-
-  function qmDigitsOnly(value) {
-    return String(value || '').replace(/\D/g, '');
-  }
-  function qmFormatUmid(value) {
-    var d = qmDigitsOnly(value).slice(0, 10);
-    var p1 = d.slice(0, 2);
-    var p2 = d.slice(2, 9);
-    var p3 = d.slice(9, 10);
-    return [p1, p2, p3].filter(Boolean).join('-');
-  }
-  function qmFormatTin(value) {
-    var d = qmDigitsOnly(value).slice(0, 12);
-    var p1 = d.slice(0, 3);
-    var p2 = d.slice(3, 6);
-    var p3 = d.slice(6, 9);
-    var p4 = d.slice(9, 12);
-    return [p1, p2, p3, p4].filter(Boolean).join('-');
-  }
-  function qmIsUmidComplete(value) {
-    return /^\d{2}-\d{7}-\d$/.test(String(value || '').trim());
-  }
-  function qmIsTinComplete(value) {
-    return /^\d{3}-\d{3}-\d{3}-\d{3}$/.test(String(value || '').trim());
-  }
-
-  function qmValUmid() {
-    if (!qmUmid) return true;
-    qmUmid.value = qmFormatUmid(qmUmid.value);
-    var v = qmUmid.value.trim();
-    if (!v) { qmClearState(qmUmid, qmUmidErr); return true; }
-    if (!qmIsUmidComplete(v)) {
-      qmSetInvalid(qmUmid, qmUmidErr, 'SSS/GSIS/UMID must follow 00-0000000-0 format.');
-      return false;
-    }
-    qmSetValid(qmUmid, qmUmidErr);
-    return true;
-  }
-  function qmValTin() {
-    if (!qmTin) return true;
-    qmTin.value = qmFormatTin(qmTin.value);
-    var v = qmTin.value.trim();
-    if (!v) { qmClearState(qmTin, qmTinErr); return true; }
-    if (!qmIsTinComplete(v)) {
-      qmSetInvalid(qmTin, qmTinErr, 'TIN must follow 000-000-000-000 format.');
-      return false;
-    }
-    qmSetValid(qmTin, qmTinErr);
-    return true;
-  }
 
   function qmNum(v) {
     var s = String(v == null ? '' : v).replace(/,/g, '').trim();
@@ -216,7 +162,7 @@
       agePenalty = Math.min(Math.abs(ageValue < 21 ? 21 - ageValue : ageValue - 60) * 0.15, 4.0);
     }
     var pct = Math.min(Math.max(basePct - stabilityRelief - tenureRelief + agePenalty, 0), 100);
-    var safeLimit = parseFloat(qmLiveCfg.dti_qualified_max || 35);
+    var safeLimit = parseFloat(qmLiveCfg.dti_qualified_max || 30);
     var cautionLimit = parseFloat(qmLiveCfg.dti_conditional_max || 42);
 
     if (qmDtiLbl) qmDtiLbl.textContent = pct.toFixed(1) + '%';
@@ -243,16 +189,6 @@
   if (qmDebt) {
     qmDebt.addEventListener('input', function () { qmValDebt(); qmUpdateDti(); });
     qmDebt.addEventListener('blur',  function () { qmValDebt(); });
-  }
-  if (qmUmid) {
-    qmUmid.addEventListener('input', qmValUmid);
-    qmUmid.addEventListener('blur', qmValUmid);
-    qmUmid.value = qmFormatUmid(qmUmid.value);
-  }
-  if (qmTin) {
-    qmTin.addEventListener('input', qmValTin);
-    qmTin.addEventListener('blur', qmValTin);
-    qmTin.value = qmFormatTin(qmTin.value);
   }
 
   /* -- Step 2 refs & validators -- */
@@ -358,14 +294,34 @@
   };
 
   var qmTrackedFieldIds = [
-    'qm-gross', 'qm-debt', 'qm-umid', 'qm-tin',
+    'qm-gross', 'qm-debt',
     'qm-status', 'qm-tenure', 'qm-age', 'qm-dependents',
     'qm-type', 'qm-bmin', 'qm-bmax'
   ];
   var qmInitialValues = {};
   var qmSnapshotCaptured = false;
 
+  function qmFormatDisplayNumber(v) {
+    if (v === null || v === undefined || v === '') return '';
+    var s = String(v).replace(/,/g, '').trim();
+    if (!s) return '';
+    var n = parseFloat(s);
+    if (isNaN(n) || n === 0) return '';
+    if (n % 1 === 0) {
+      return n.toLocaleString('en-US');
+    }
+    return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function qmFormatModalNumericFields() {
+    if (qmGross) qmGross.value = qmFormatDisplayNumber(qmGross.value);
+    if (qmDebt)  qmDebt.value  = qmFormatDisplayNumber(qmDebt.value);
+    if (qmBmin)  qmBmin.value  = qmFormatDisplayNumber(qmBmin.value);
+    if (qmBmax)  qmBmax.value  = qmFormatDisplayNumber(qmBmax.value);
+  }
+
   function qmCaptureInitialValues() {
+    qmFormatModalNumericFields();
     qmTrackedFieldIds.forEach(function (id) {
       var el = document.getElementById(id);
       if (!el) return;
@@ -376,8 +332,6 @@
   function qmClearAllValidationUI() {
     qmClearState(qmGross, qmGrossErr);
     qmClearState(qmDebt, qmDebtErr);
-    qmClearState(qmUmid, qmUmidErr);
-    qmClearState(qmTin, qmTinErr);
     qmClearState(qmStat, qmStatErr);
     qmClearState(qmTenure, qmTenureErr);
     qmClearState(qmAge, qmAgeErr);
@@ -395,8 +349,7 @@
       if (!el) return;
       el.value = qmInitialValues[id] || '';
     });
-    if (qmUmid) qmUmid.value = qmFormatUmid(qmUmid.value);
-    if (qmTin) qmTin.value = qmFormatTin(qmTin.value);
+    qmFormatModalNumericFields();
     qmClearAllValidationUI();
     qmUpdateDti();
     qmValTenure();
@@ -476,7 +429,7 @@
 
   /* -- Per-step validation -- */
   function qmValStep(n) {
-    if (n === 1) { var ok = qmValGross(true); qmValDebt(); var u = qmValUmid(); var t = qmValTin(); return ok && u && t; }
+    if (n === 1) { var ok = qmValGross(true); var dOk = qmValDebt(); return ok && dOk; }
     if (n === 2) { var a = qmValStatus(true); qmValTenure(); var b = qmValAge(true); var c = qmValDependents(); return a && b && c; }
     if (n === 3) { qmTouched.step3Submitted = true; return qmValHousing(true); }
     return true;
@@ -495,8 +448,6 @@
     var errMap = {
       gross_monthly_income: [qmGross, qmGrossErr],
       monthly_debt_loans: [qmDebt, qmDebtErr],
-      sss_gsis_umid: [qmUmid, qmUmidErr],
-      tin_no: [qmTin, qmTinErr],
       employment_status: [qmStat, qmStatErr],
       tenure_months: [qmTenure, qmTenureErr],
       age: [qmAge, qmAgeErr],
@@ -602,6 +553,7 @@
         qmClearForNewAssessment();
       } else {
         qmRestoreInitialValues();
+        qmFormatModalNumericFields();
       }
 
       qmShowStep(1);
@@ -621,6 +573,7 @@
   }
 
   /* -- Init -- */
+  qmFormatModalNumericFields();
   qmUpdateDti();
   if (qmStat   && qmStat.value)   qmValStatus(false);
   if (qmTenure && qmTenure.value) qmValTenure();
@@ -806,6 +759,61 @@
           <p class="pvm-detail-value mb-0" id="pvmDescription" style="white-space:pre-wrap;"></p>
         </div>
 
+        <!-- Inquiries & Contact Section -->
+        <div class="pvm-contact-wrap mb-3">
+          <div class="pvm-contact-header">
+            <div class="pvm-contact-header-left">
+              <i class="fas fa-headset pvm-contact-header-icon"></i>
+              <span class="pvm-contact-header-title">For Inquiries &amp; Assistance</span>
+            </div>
+            <span class="pvm-contact-header-subtitle">Annregar Realty</span>
+          </div>
+
+          <div class="pvm-contact-grid">
+            <!-- Facebook Card -->
+            <a href="https://web.facebook.com/annregarrealty1017/?_rdc=1&amp;_rdr#" target="_blank" rel="noopener noreferrer" class="pvm-contact-card pvm-contact-fb" title="Visit Annregar Realty on Facebook">
+              <div class="pvm-contact-icon-wrap fb">
+                <i class="fab fa-facebook-f"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Facebook</div>
+                <div class="pvm-contact-val">Annregar Realty</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+
+            <!-- Gmail / Email Card -->
+            <a href="mailto:annregar.realty@gmail.com" class="pvm-contact-card pvm-contact-email" title="Send Email to Annregar Realty">
+              <div class="pvm-contact-icon-wrap email">
+                <i class="fas fa-envelope"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Gmail</div>
+                <div class="pvm-contact-val">annregar.realty@gmail.com</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+
+            <!-- Phone / Contact Card -->
+            <a href="tel:09178617688" class="pvm-contact-card pvm-contact-phone" title="Call or Text 0917 861 7688">
+              <div class="pvm-contact-icon-wrap phone">
+                <i class="fas fa-phone"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Contact Number</div>
+                <div class="pvm-contact-val">0917 861 7688</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+          </div>
+        </div>
+
         <div id="pvmPricingRequestHint" class="alert alert-info small d-none mb-3">
           <i class="fas fa-info-circle me-1"></i>
           Full computation details are available after an agent approves your request.
@@ -887,36 +895,6 @@
               <div class="pvm-pb-card pvm-pb-card-summary">
                 <div class="pvm-pb-label">Annual Interest</div>
                 <div class="pvm-pb-value" id="pvmRate">—</div>
-              </div>
-            </div>
-            <div class="col-12 col-md-6">
-              <div class="pvm-pb-card pvm-pb-card-summary">
-                <div class="pvm-pb-label">Processing Fee</div>
-                <div class="pvm-pb-value" id="pvmProcessingFee">—</div>
-              </div>
-            </div>
-            <div class="col-12 col-md-6">
-              <div class="pvm-pb-card pvm-pb-card-summary">
-                <div class="pvm-pb-label">OR/PR No.</div>
-                <div class="pvm-pb-value" id="pvmOrPrNo">—</div>
-              </div>
-            </div>
-            <div class="col-12 col-md-6">
-              <div class="pvm-pb-card pvm-pb-card-summary">
-                <div class="pvm-pb-label">OR/PR Date</div>
-                <div class="pvm-pb-value" id="pvmOrPrDate">—</div>
-              </div>
-            </div>
-            <div class="col-12 col-md-6">
-              <div class="pvm-pb-card pvm-pb-card-summary">
-                <div class="pvm-pb-label">Downpayment Term</div>
-                <div class="pvm-pb-value" id="pvmDownpaymentTermAdmin">—</div>
-              </div>
-            </div>
-            <div class="col-12">
-              <div class="pvm-pb-card pvm-pb-card-summary">
-                <div class="pvm-pb-label">Loan Term</div>
-                <div class="pvm-pb-value" id="pvmLoanTermAdmin">—</div>
               </div>
             </div>
           </div>
@@ -1015,7 +993,7 @@
 
 {# Conditional Requirements Modal #}
 <div class="modal fade" id="conditionalReqModal" tabindex="-1" aria-labelledby="conditionalReqLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-md">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content sqh-modal">
       <div class="sqh-modal-header">
         <div class="d-flex align-items-center gap-2">
@@ -1032,15 +1010,63 @@
           <li class="mb-2"><i class="fas fa-hand-holding-usd me-2 text-primary"></i><strong>Larger Down Payment</strong></li>
           <li class="mb-2"><i class="fas fa-briefcase me-2 text-primary"></i><strong>Improve Employment Stability</strong></li>
         </ul>
-        <div class="sqh-info-box">
+        <div class="sqh-info-box mb-0">
           <div class="fw-bold mb-1"><i class="fas fa-user-tie me-2"></i><span id="crAgentName">Ann Regar</span></div>
-          <div class="small text-muted mb-2">Our agent can walk you through these options and help you find the right path to owning your home.</div>
-          <div class="d-flex flex-wrap gap-2">
-            <a href="#" target="_blank" rel="noopener" class="btn btn-outline-blue btn-sm" id="crFacebookBtn"><i class="fab fa-facebook-f me-1"></i> Facebook</a>
-            <a href="#" target="_blank" rel="noopener" class="btn btn-outline-blue btn-sm" id="crInstagramBtn"><i class="fab fa-instagram me-1"></i> Instagram</a>
-            <a href="#" target="_blank" rel="noopener" class="btn btn-outline-blue btn-sm" id="crViberBtn"><i class="fas fa-phone-alt me-1"></i> Viber</a>
-            <a href="#" target="_blank" rel="noopener" class="btn btn-outline-blue btn-sm" id="crWhatsAppBtn"><i class="fab fa-whatsapp me-1"></i> WhatsApp</a>
-            <a href="#" target="_blank" rel="noopener" class="btn btn-outline-blue btn-sm" id="crPhoneBtn"><i class="fas fa-phone me-1"></i> Call</a>
+          <div class="small text-muted mb-3">Our agent can walk you through these options and help you find the right path to owning your home.</div>
+
+          <!-- Contact & Inquiries Section -->
+          <div class="pvm-contact-wrap mt-2">
+            <div class="pvm-contact-header">
+              <div class="pvm-contact-header-left">
+                <i class="fas fa-headset pvm-contact-header-icon"></i>
+                <span class="pvm-contact-header-title">For Inquiries &amp; Assistance</span>
+              </div>
+              <span class="pvm-contact-header-subtitle">Annregar Realty</span>
+            </div>
+
+            <div class="pvm-contact-grid">
+              <!-- Facebook Card -->
+              <a href="https://web.facebook.com/annregarrealty1017/?_rdc=1&amp;_rdr#" target="_blank" rel="noopener noreferrer" class="pvm-contact-card pvm-contact-fb" id="crContactFbCard" title="Visit Annregar Realty on Facebook">
+                <div class="pvm-contact-icon-wrap fb">
+                  <i class="fab fa-facebook-f"></i>
+                </div>
+                <div class="pvm-contact-info">
+                  <div class="pvm-contact-title">Facebook</div>
+                  <div class="pvm-contact-val">Annregar Realty</div>
+                </div>
+                <div class="pvm-contact-action">
+                  <i class="fas fa-arrow-up-right-from-square"></i>
+                </div>
+              </a>
+
+              <!-- Gmail / Email Card -->
+              <a href="mailto:annregar.realty@gmail.com" class="pvm-contact-card pvm-contact-email" id="crContactEmailCard" title="Send Email to Annregar Realty">
+                <div class="pvm-contact-icon-wrap email">
+                  <i class="fas fa-envelope"></i>
+                </div>
+                <div class="pvm-contact-info">
+                  <div class="pvm-contact-title">Gmail</div>
+                  <div class="pvm-contact-val">annregar.realty@gmail.com</div>
+                </div>
+                <div class="pvm-contact-action">
+                  <i class="fas fa-arrow-up-right-from-square"></i>
+                </div>
+              </a>
+
+              <!-- Phone / Contact Card -->
+              <a href="tel:09178617688" class="pvm-contact-card pvm-contact-phone" id="crContactPhoneCard" title="Call Annregar Realty">
+                <div class="pvm-contact-icon-wrap phone">
+                  <i class="fas fa-phone"></i>
+                </div>
+                <div class="pvm-contact-info">
+                  <div class="pvm-contact-title">Contact Number</div>
+                  <div class="pvm-contact-val" id="crContactPhoneVal">0917 861 7688</div>
+                </div>
+                <div class="pvm-contact-action">
+                  <i class="fas fa-arrow-up-right-from-square"></i>
+                </div>
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -1123,6 +1149,61 @@
             Description
           </div>
           <p class="fw-semibold small" id="bvmDescription" style="color:var(--clr-text);white-space:pre-wrap;"></p>
+        </div>
+
+        <!-- Inquiries & Contact Section -->
+        <div class="pvm-contact-wrap mb-3">
+          <div class="pvm-contact-header">
+            <div class="pvm-contact-header-left">
+              <i class="fas fa-headset pvm-contact-header-icon"></i>
+              <span class="pvm-contact-header-title">For Inquiries &amp; Assistance</span>
+            </div>
+            <span class="pvm-contact-header-subtitle">Annregar Realty</span>
+          </div>
+
+          <div class="pvm-contact-grid">
+            <!-- Facebook Card -->
+            <a href="https://web.facebook.com/annregarrealty1017/?_rdc=1&amp;_rdr#" target="_blank" rel="noopener noreferrer" class="pvm-contact-card pvm-contact-fb" title="Visit Annregar Realty on Facebook">
+              <div class="pvm-contact-icon-wrap fb">
+                <i class="fab fa-facebook-f"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Facebook</div>
+                <div class="pvm-contact-val">Annregar Realty</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+
+            <!-- Gmail / Email Card -->
+            <a href="mailto:annregar.realty@gmail.com" class="pvm-contact-card pvm-contact-email" title="Send Email to Annregar Realty">
+              <div class="pvm-contact-icon-wrap email">
+                <i class="fas fa-envelope"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Gmail</div>
+                <div class="pvm-contact-val">annregar.realty@gmail.com</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+
+            <!-- Phone / Contact Card -->
+            <a href="tel:09178617688" class="pvm-contact-card pvm-contact-phone" title="Call or Text 0917 861 7688">
+              <div class="pvm-contact-icon-wrap phone">
+                <i class="fas fa-phone"></i>
+              </div>
+              <div class="pvm-contact-info">
+                <div class="pvm-contact-title">Contact Number</div>
+                <div class="pvm-contact-val">0917 861 7688</div>
+              </div>
+              <div class="pvm-contact-action">
+                <i class="fas fa-arrow-up-right-from-square"></i>
+              </div>
+            </a>
+          </div>
         </div>
 
         <div class="d-flex gap-2 justify-content-end pt-3 border-top">
@@ -1313,7 +1394,7 @@
               </div>
               <div class="col-md-4"><label class="form-label">Birth Place</label><input id="pbBirthPlace" class="form-control buyer-icon-input" value="{{ pb.birthplace if pb and pb.birthplace else '' }}"></div>
               <div class="col-md-4"><label class="form-label">Tax Identification No (TIN)</label><input id="pbTin" class="form-control buyer-icon-input" value="{{ pb.tin_no if pb and pb.tin_no else '' }}" inputmode="numeric" maxlength="15" placeholder="000-000-000-000"></div>
-              <div class="col-md-4"><label class="form-label">Gross Monthly Income</label><input id="pbGrossIncome" type="text" data-commas inputmode="decimal" class="form-control buyer-icon-input" value="{{ pb.gross_income if pb and pb.gross_income is not none else '' }}"></div>
+              <div class="col-md-4"><label class="form-label">Gross Monthly Income</label><input id="pbGrossIncome" type="text" data-commas inputmode="decimal" class="form-control buyer-icon-input" value="{{ pb.gross_income|commas_input if pb and pb.gross_income is not none else '' }}"></div>
 
               <div class="col-md-4">
                 <label class="form-label">With Dependents</label>
@@ -2125,7 +2206,7 @@
                     {{ qualify_form.gross_monthly_income.label(class="sqh-form-label") }}
                     <div class="input-group">
                       <span class="input-group-text sqh-peso-prefix">&#8369;</span>
-                      {{ qualify_form.gross_monthly_income(class="form-control sqh-form-control", id="qm-gross", type="text", **{"data-commas": "", "inputmode": "decimal"}) }}
+                      {{ qualify_form.gross_monthly_income(class="form-control sqh-form-control", id="qm-gross", type="text", value=qualify_form.gross_monthly_income.data|commas_input, **{"data-commas": "", "inputmode": "decimal"}) }}
                     </div>
                     <div class="sqh-live-error" id="qm-gross-err"></div>
                   </div>
@@ -2133,25 +2214,9 @@
                     {{ qualify_form.monthly_debt_loans.label(class="sqh-form-label") }}
                     <div class="input-group">
                       <span class="input-group-text sqh-peso-prefix">&#8369;</span>
-                      {{ qualify_form.monthly_debt_loans(class="form-control sqh-form-control", id="qm-debt", type="text", **{"data-commas": "", "inputmode": "decimal"}) }}
+                      {{ qualify_form.monthly_debt_loans(class="form-control sqh-form-control", id="qm-debt", type="text", value=qualify_form.monthly_debt_loans.data|commas_input, **{"data-commas": "", "inputmode": "decimal"}) }}
                     </div>
                     <div class="sqh-live-error" id="qm-debt-err"></div>
-                  </div>
-                  <div class="col-sm-6">
-                    {{ qualify_form.sss_gsis_umid.label(class="sqh-form-label") }}
-                    <div class="input-group sqh-input-group">
-                      <span class="input-group-text sqh-ig-text"><i class="fas fa-id-card"></i></span>
-                      {{ qualify_form.sss_gsis_umid(class="form-control sqh-form-control", id="qm-umid", inputmode="numeric", maxlength="13", placeholder="00-0000000-0") }}
-                    </div>
-                    <div class="sqh-live-error" id="qm-umid-err"></div>
-                  </div>
-                  <div class="col-sm-6">
-                    {{ qualify_form.tin_no.label(class="sqh-form-label") }}
-                    <div class="input-group sqh-input-group">
-                      <span class="input-group-text sqh-ig-text"><i class="fas fa-receipt"></i></span>
-                      {{ qualify_form.tin_no(class="form-control sqh-form-control", id="qm-tin", inputmode="numeric", maxlength="15", placeholder="000-000-000-000") }}
-                    </div>
-                    <div class="sqh-live-error" id="qm-tin-err"></div>
                   </div>
                 </div>
               </div>
@@ -2224,7 +2289,7 @@
                     {{ qualify_form.budget_min.label(class="sqh-form-label") }}
                     <div class="input-group">
                       <span class="input-group-text sqh-peso-prefix">&#8369;</span>
-                      {{ qualify_form.budget_min(class="form-control sqh-form-control", id="qm-bmin", type="text", **{"data-commas": "", "inputmode": "decimal"}) }}
+                      {{ qualify_form.budget_min(class="form-control sqh-form-control", id="qm-bmin", type="text", value=qualify_form.budget_min.data|commas_input, **{"data-commas": "", "inputmode": "decimal"}) }}
                     </div>
                     <div class="sqh-live-error" id="qm-bmin-err"></div>
                   </div>
@@ -2232,7 +2297,7 @@
                     {{ qualify_form.budget_max.label(class="sqh-form-label") }}
                     <div class="input-group">
                       <span class="input-group-text sqh-peso-prefix">&#8369;</span>
-                      {{ qualify_form.budget_max(class="form-control sqh-form-control", id="qm-bmax", type="text", **{"data-commas": "", "inputmode": "decimal"}) }}
+                      {{ qualify_form.budget_max(class="form-control sqh-form-control", id="qm-bmax", type="text", value=qualify_form.budget_max.data|commas_input, **{"data-commas": "", "inputmode": "decimal"}) }}
                     </div>
                     <div class="sqh-live-error" id="qm-bmax-err"></div>
                   </div>
@@ -2253,7 +2318,7 @@
                 </div>
                 <div class="dti-zones">
                   <span>0%</span>
-                  <span style="color:var(--clr-accent-dk);font-weight:600;">35% &mdash; Safe</span>
+                  <span style="color:var(--clr-accent-dk);font-weight:600;">30% &mdash; Safe</span>
                   <span style="color:var(--clr-amber-dk);font-weight:600;">42% &mdash; Caution</span>
                   <span>100%</span>
                 </div>
@@ -2375,6 +2440,7 @@
             {% set approved_trips = my_trips | selectattr('status','equalto','approved') | list %}
             {% set visited_trips = my_trips | selectattr('status','equalto','visited') | list %}
             {% set rejected_trips = my_trips | selectattr('status','equalto','rejected') | list %}
+            {% set visited_prop_ids = my_trips | selectattr('status','equalto','visited') | map(attribute='property_id') | list %}
             {% set detail_decisions = detail_request_notifications %}
             {% set purchase_form_updates = purchase_form_notifications if purchase_form_notifications is defined else [] %}
             {% set trip_status_updates = trip_status_notifications if trip_status_notifications is defined else [] %}
@@ -2609,7 +2675,7 @@
         <a href="#" class="btn btn-sm btn-outline-crimson" style="box-shadow: var(--shadow-xs);" data-goto="browse">See All</a>
       </div>
       <div class="row g-3 mb-4" id="homeQualifiedGrid">
-        {% for p in (matched_props or [])[:8] %}
+        {% for p in (qualified_props or [])[:8] %}
         {% set first_img = p.images.split(',')[0].strip() if p.images else '' %}
         {% set img_count = (p.images.split(',')|length) if p.images else 0 %}
         {% set psgc_tail = [p.barangay_name, p.citymun_name, p.province_name, p.region_name]|select|join(', ') %}
@@ -2622,17 +2688,9 @@
         {% set pricing = property_pricing_map.get(p.id, {}) %}
         {% set client_income = profile.gross_income|float if profile and profile.gross_income else 0 %}
         {% set req_income_map = pricing.required_monthly_income if pricing and pricing.required_monthly_income else {} %}
-        {# 09/15/26: conditional-aware + fail-open. Backend _is_affordable_any_term() keeps houses where income >= req*35/42 (Conditionally Qualified). The old strict check (income >= req) hid conditional houses server-side, emptying both sections. Missing req data or missing income fails open (show card), matching the backend second-pass guard. #}
-        {% set q_max = (live_meter_cfg.get('dti_qualified_max', 35)|float) if live_meter_cfg else 35.0 %}
-        {% set c_max = (live_meter_cfg.get('dti_conditional_max', 42)|float) if live_meter_cfg else 42.0 %}
-        {% set cond_ratio = (q_max / c_max) if c_max > 0 else 0.8333 %}
+        {# Qualified Models: client must be fully qualified for the 5-year term (income >= req5) #}
         {% set req5 = req_income_map.get('5', 0)|float %}
-        {% set req10 = req_income_map.get('10', 0)|float %}
-        {% set req15 = req_income_map.get('15', 0)|float %}
-        {% set req20 = req_income_map.get('20', 0)|float %}
-        {% set has_req = (req5 > 0) or (req10 > 0) or (req15 > 0) or (req20 > 0) %}
-        {% set is_eligible_any_year = (not has_req) or (client_income <= 0) or (req5 > 0 and client_income >= req5 * cond_ratio) or (req10 > 0 and client_income >= req10 * cond_ratio) or (req15 > 0 and client_income >= req15 * cond_ratio) or (req20 > 0 and client_income >= req20 * cond_ratio) %}
-        {% set is_eligible = is_eligible_any_year %}
+        {% set is_eligible = (req5 > 0 and client_income >= req5) if req5 > 0 else (client_income <= 0) %}
         {% if is_eligible %}
         <div class="col-12 col-sm-6 col-xl-4 home-qualified-card-col">
           <div class="prop-card prop-card-clickable"
@@ -2695,6 +2753,18 @@
                 <span><i class="fas fa-clock me-1"></i>{{ p.created_at.strftime('%b %d, %Y') if p.created_at else '—' }}</span>
               </div>
               <button type="button"
+                      class="btn {{ 'btn-outline-blue' if p.id in visited_prop_ids else ('btn-outline-crimson' if has_request else 'btn-lime') }} w-100 mt-2 prop-card-request-btn"
+                      data-requested="{{ '1' if has_request else '0' }}"
+                      data-visit-mode="{{ '1' if p.id in visited_prop_ids else '0' }}">
+                {% if p.id in visited_prop_ids %}
+                <i class="fas fa-calendar-check me-1"></i> View Visit
+                {% elif has_request %}
+                <i class="fas fa-eye me-1"></i> View Request
+                {% else %}
+                <i class="fas fa-calendar-plus me-1"></i> Request Visit
+                {% endif %}
+              </button>
+              <button type="button"
                       class="btn {{ 'btn-outline-lime' if detail_status == 'approved' else ('btn-outline-crimson' if detail_status == 'pending' else 'btn-outline-blue') }} w-100 mt-2 prop-card-details-btn"
                       data-detail-status="{{ detail_status }}">
                 {% if detail_status == 'approved' %}
@@ -2711,7 +2781,7 @@
         {% endif %}
         {% endfor %}
       </div>
-      <div id="homeQualifiedEmpty" class="cp-empty-state d-none mb-4">
+      <div id="homeQualifiedEmpty" class="cp-empty-state {% if qualified_props %}d-none{% endif %} mb-4">
         <i class="fas fa-check-circle fa-3x mb-3"></i>
         <p class="fw-semibold mb-1">No qualified models yet</p>
         <p class="text-muted small mb-0">Complete or update your assessment to see qualified options here.</p>
@@ -2726,7 +2796,7 @@
         <a href="#" class="btn btn-sm btn-outline-crimson" style="box-shadow: var(--shadow-xs);" data-goto="browse">See All</a>
       </div>
       <div class="row g-3 mb-4" id="homeRecommendedGrid">
-        {% for p in (matched_props or [])[:8] %}
+        {% for p in (recommended_props or [])[:8] %}
         {% set first_img = p.images.split(',')[0].strip() if p.images else '' %}
         {% set img_count = (p.images.split(',')|length) if p.images else 0 %}
         {% set psgc_tail = [p.barangay_name, p.citymun_name, p.province_name, p.region_name]|select|join(', ') %}
@@ -2739,10 +2809,10 @@
         {% set pricing = property_pricing_map.get(p.id, {}) %}
         {% set client_income = profile.gross_income|float if profile and profile.gross_income else 0 %}
         {% set req_income_map = pricing.required_monthly_income if pricing and pricing.required_monthly_income else {} %}
-        {# 09/15/26: conditional-aware + fail-open. Backend _is_affordable_any_term() keeps houses where income >= req*35/42 (Conditionally Qualified). The old strict check (income >= req) hid conditional houses server-side, emptying both sections. Missing req data or missing income fails open (show card), matching the backend second-pass guard. #}
-        {% set q_max = (live_meter_cfg.get('dti_qualified_max', 35)|float) if live_meter_cfg else 35.0 %}
+        {# 09/15/26: conditional-aware + fail-open. Backend _is_affordable_any_term() keeps houses where income >= req*30/42 (Conditionally Qualified). The old strict check (income >= req) hid conditional houses server-side, emptying both sections. Missing req data or missing income fails open (show card), matching the backend second-pass guard. #}
+        {% set q_max = (live_meter_cfg.get('dti_qualified_max', 30)|float) if live_meter_cfg else 30.0 %}
         {% set c_max = (live_meter_cfg.get('dti_conditional_max', 42)|float) if live_meter_cfg else 42.0 %}
-        {% set cond_ratio = (q_max / c_max) if c_max > 0 else 0.8333 %}
+        {% set cond_ratio = (q_max / c_max) if c_max > 0 else 0.7143 %}
         {% set req5 = req_income_map.get('5', 0)|float %}
         {% set req10 = req_income_map.get('10', 0)|float %}
         {% set req15 = req_income_map.get('15', 0)|float %}
@@ -2751,7 +2821,7 @@
         {% set is_eligible_any_year = (not has_req) or (client_income <= 0) or (req5 > 0 and client_income >= req5 * cond_ratio) or (req10 > 0 and client_income >= req10 * cond_ratio) or (req15 > 0 and client_income >= req15 * cond_ratio) or (req20 > 0 and client_income >= req20 * cond_ratio) %}
         {% set is_eligible = is_eligible_any_year %}
         {% if is_eligible %}
-        <div class="col-12 col-sm-6 col-xl-4">
+        <div class="col-12 col-sm-6 col-xl-4 home-recommended-card-col">
           <div class="prop-card prop-card-clickable"
                data-prop-id="{{ p.id }}"
                data-prop-name="{{ p.name }}"
@@ -2814,6 +2884,18 @@
                 <span><i class="fas fa-clock me-1"></i>{{ p.created_at.strftime('%b %d, %Y') if p.created_at else '—' }}</span>
               </div>
               <button type="button"
+                      class="btn {{ 'btn-outline-blue' if p.id in visited_prop_ids else ('btn-outline-crimson' if has_request else 'btn-lime') }} w-100 mt-2 prop-card-request-btn"
+                      data-requested="{{ '1' if has_request else '0' }}"
+                      data-visit-mode="{{ '1' if p.id in visited_prop_ids else '0' }}">
+                {% if p.id in visited_prop_ids %}
+                <i class="fas fa-calendar-check me-1"></i> View Visit
+                {% elif has_request %}
+                <i class="fas fa-eye me-1"></i> View Request
+                {% else %}
+                <i class="fas fa-calendar-plus me-1"></i> Request Visit
+                {% endif %}
+              </button>
+              <button type="button"
                       class="btn {{ 'btn-outline-lime' if detail_status == 'approved' else ('btn-outline-crimson' if detail_status == 'pending' else 'btn-outline-blue') }} w-100 mt-2 prop-card-details-btn"
                       data-detail-status="{{ detail_status }}">
                 {% if detail_status == 'approved' %}
@@ -2830,7 +2912,7 @@
         {% endif %}
         {% endfor %}
       </div>
-      <div id="homeRecommendedEmpty" class="cp-empty-state d-none mb-4">
+      <div id="homeRecommendedEmpty" class="cp-empty-state {% if recommended_props %}d-none{% endif %} mb-4">
         <i class="fas fa-star fa-3x mb-3"></i>
         <p class="fw-semibold mb-1">No recommended models yet</p>
         <p class="text-muted small mb-0">We will show personalized recommendations once matching data is available.</p>
@@ -3499,19 +3581,19 @@
         <h6 class="fw-bold mb-3"><i class="fas fa-chart-bar me-2 text-crimson"></i>Debt-to-Income (DTI) Breakdown</h6>
         <div class="dti-meter-wrap mb-2 p-2">
           <div class="dti-meter-track">
-            <div class="dti-meter-fill js-dti-fill {% if qual_result.dti_ratio > 40 %}dti-danger{% elif qual_result.dti_ratio > 30 %}dti-caution{% else %}dti-safe{% endif %}"
+            <div class="dti-meter-fill js-dti-fill {% if qual_result.dti_ratio > 42 %}dti-danger{% elif qual_result.dti_ratio > 30 %}dti-caution{% else %}dti-safe{% endif %}"
                  data-dti-width="{{ [qual_result.dti_ratio, 100]|min }}"></div>
           </div>
         </div>
         <div class="dti-zones">
           <span class="dti-label-safe"><i class="fas fa-check me-1"></i>&le;30% Safe</span>
-          <span class="dti-label-caution"><i class="fas fa-exclamation me-1"></i>3140% Caution</span>
-          <span class="dti-label-danger"><i class="fas fa-times me-1"></i>&gt;40% High Risk</span>
+          <span class="dti-label-caution"><i class="fas fa-exclamation me-1"></i>31–42% Caution</span>
+          <span class="dti-label-danger"><i class="fas fa-times me-1"></i>&gt;42% High Risk</span>
         </div>
         <p class="text-muted small mt-2 mb-0">
           Your DTI of <strong>{{ '%.1f%%'|format(qual_result.dti_ratio) }}</strong>
-          {% if qual_result.dti_ratio <= 30 %} is within the safe range  great financial standing!
-          {% elif qual_result.dti_ratio <= 40 %} is in the caution zone. Consider reducing existing debt obligations.
+          {% if qual_result.dti_ratio <= 30 %} is within the safe range &mdash; great financial standing!
+          {% elif qual_result.dti_ratio <= 42 %} is in the caution zone. Consider reducing existing debt obligations.
           {% else %} exceeds the recommended threshold. Reducing monthly loans may improve your eligibility.
           {% endif %}
         </p>
@@ -4066,11 +4148,11 @@
               <i class="fas fa-file-shield" style="color:var(--clr-blue);"></i>
             </div>
             <div>
-              <div class="prof-section-title">Documentation</div>
-              <div class="prof-section-sub">Manage your uploaded Valid ID and Proof of Income files</div>
+              <div class="prof-section-title">Document Honesty Declaration</div>
+              <div class="prof-section-sub">Confirm whether you currently have a Valid ID and Proof of Income</div>
             </div>
           </div>
-          <div class="row g-3 mb-3">
+          <div class="row g-3">
             <div class="col-12 col-lg-6">
               <label class="sqh-form-label">Do you currently have one valid ID?</label>
               <div class="input-group sqh-input-group">
@@ -4091,74 +4173,6 @@
                   <option value="yes" {% if profile and profile.has_income_proof is sameas true %}selected{% endif %}>Yes</option>
                   <option value="no" {% if profile and profile.has_income_proof is sameas false %}selected{% endif %}>No</option>
                 </select>
-              </div>
-            </div>
-          </div>
-          <div class="row g-3">
-            <div class="col-12 col-lg-6">
-              <div class="prof-doc-card" id="docCardValidId" data-doc-kind="valid-id">
-                <div class="prof-doc-head">
-                    <div class="prof-status-badges">
-                      <label class="sqh-form-label mb-0" for="docUploadValidId">Upload / Change File (Optional)</label>
-                    </div>
-                  <div class="prof-action-buttons">
-                     {% if profile and profile.valid_id_data %}
-                      <span class="sqh-badge doc-status-badge doc-badge-pre-selling">Uploaded</span>
-                      {% else %}
-                      <span class="sqh-badge doc-status-badge doc-badge-resale">Not Uploaded</span>
-                      {% endif %}
-                    <a href="{{ url_for('client.view_client_document', doc_kind='valid-id') if profile and profile.valid_id_data else '#' }}"
-                      target="_blank" rel="noopener"
-                      class="btn btn-outline-blue btn-sm prof-doc-view-btn {% if not (profile and profile.valid_id_data) %}disabled{% endif %}"
-                      id="docViewValidId">
-                      <i class="fas fa-eye me-1"></i>
-                    </a>
-                    <button type="button" class="btn btn-outline-crimson btn-sm prof-doc-delete-btn {% if not (profile and profile.valid_id_data) %}d-none{% endif %}" data-doc-kind="valid-id" id="docDeleteValidId">
-                      <i class="fas fa-trash me-1"></i>
-                    </button>
-                  </div>
-                </div>
-                <div class="prof-doc-actions">
-                  <div class="input-group sqh-input-group">
-                    <span class="input-group-text sqh-ig-text"><i class="fas fa-upload"></i></span>
-                    <input type="text" id="docUploadValidId" class="form-control sqh-form-control prof-doc-input" value="{{ profile.valid_id_filename if profile and profile.valid_id_data and profile.valid_id_filename else '' }}" placeholder="No file selected" readonly>
-                    <button type="button" class="btn btn-outline-crimson" id="docUploadValidIdBtn"><i class="fas fa-folder-open"></i> Browse</button>
-                    <input type="file" id="docUploadValidIdPicker" class="d-none" accept=".jpg,.jpeg,.png,.webp,.pdf">
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="col-12 col-lg-6">
-              <div class="prof-doc-card" id="docCardIncomeProof" data-doc-kind="income-proof">
-                <div class="prof-doc-head">
-                  <div class="prof-status-badges">
-                    <label class="sqh-form-label mb-0" for="docUploadIncomeProof">Upload / Change File (Optional)</label>
-                  </div>
-                  <div class="prof-action-buttons">
-                    {% if profile and profile.income_proof_data %}
-                    <span class="sqh-badge doc-status-badge doc-badge-pre-selling">Uploaded</span>
-                    {% else %}
-                    <span class="sqh-badge doc-status-badge doc-badge-resale">Not Uploaded</span>
-                    {% endif %}
-                    <a href="{{ url_for('client.view_client_document', doc_kind='income-proof') if profile and profile.income_proof_data else '#' }}"
-                      target="_blank" rel="noopener"
-                      class="btn btn-outline-blue btn-sm prof-doc-view-btn {% if not (profile and profile.income_proof_data) %}disabled{% endif %}"
-                      id="docViewIncomeProof">
-                      <i class="fas fa-eye me-1"></i>
-                    </a>
-                    <button type="button" class="btn btn-outline-crimson btn-sm prof-doc-delete-btn {% if not (profile and profile.income_proof_data) %}d-none{% endif %}" data-doc-kind="income-proof" id="docDeleteIncomeProof">
-                      <i class="fas fa-trash me-1"></i>
-                    </button>
-                  </div>
-                </div>
-                <div class="prof-doc-actions">
-                  <div class="input-group sqh-input-group">
-                    <span class="input-group-text sqh-ig-text"><i class="fas fa-upload"></i></span>
-                    <input type="text" id="docUploadIncomeProof" class="form-control sqh-form-control prof-doc-input" value="{{ profile.income_proof_filename if profile and profile.income_proof_data and profile.income_proof_filename else '' }}" placeholder="No file selected" readonly>
-                    <button type="button" class="btn btn-outline-crimson" id="docUploadIncomeProofBtn"><i class="fas fa-folder-open"></i> Browse</button>
-                    <input type="file" id="docUploadIncomeProofPicker" class="d-none" accept=".jpg,.jpeg,.png,.webp,.pdf">
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -4312,7 +4326,20 @@
               </div>
             </div>
             <div class="row g-3">
-              <div class="col-md-6">
+              <div class="col-12 col-md-4">
+                <label class="sqh-form-label"><i class="fas fa-key me-1 text-crimson"></i>Current Password</label>
+                <div class="input-group sqh-input-group">
+                  <span class="input-group-text sqh-ig-text"><i class="fas fa-key"></i></span>
+                  <input type="password" id="prof_old_password" class="form-control sqh-form-control"
+                         placeholder="Enter current password">
+                  <button type="button" class="btn sqh-eye-btn sqh-pw-toggle toggle-password" data-target="prof_old_password"
+                          tabindex="-1" aria-label="Toggle visibility">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+                <div class="sqh-live-error" id="prof_old_password_error"></div>
+              </div>
+              <div class="col-12 col-md-4">
                 <label class="sqh-form-label"><i class="fas fa-lock me-1 text-crimson"></i>New Password</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-lock"></i></span>
@@ -4330,7 +4357,7 @@
                   <li id="profPwSpecial"><i class="fas fa-circle-dot"></i> Symbol</li>
                 </ul>
               </div>
-              <div class="col-md-6">
+              <div class="col-12 col-md-4">
                 <label class="sqh-form-label"><i class="fas fa-lock me-1 text-crimson"></i>Confirm New Password</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-lock"></i></span>

@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
@@ -24,6 +25,9 @@ class User(UserMixin, db.Model):
     role           = db.Column(db.Enum("client", "agent", "admin", name="user_role"),
                                 nullable=False, default="client")
     is_active      = db.Column(db.Boolean, default=True, nullable=False)
+    is_verified    = db.Column(db.Boolean, default=True, nullable=False)
+    otp_code       = db.Column(db.String(10), nullable=True)
+    otp_expiry     = db.Column(db.DateTime, nullable=True)
     forgot_password_attempts = db.Column(db.Integer, default=0, nullable=False)
     forgot_password_window_started_at = db.Column(db.DateTime, nullable=True)
     admin_dismissed_property_notifs = db.Column(db.Text, nullable=True)
@@ -326,6 +330,29 @@ class Subdivision(db.Model):
             return
         self.images_csv = ",".join([str(item).strip() for item in value if str(item).strip()])
 
+    @property
+    def city_province(self):
+        """Returns clean 'City, Province' e.g. 'Carmona, Cavite'."""
+        if self.citymun_name and self.province_name:
+            city = re.sub(r"^city of\s+", "", self.citymun_name.strip(), flags=re.I)
+            prov = self.province_name.strip()
+            return f"{city}, {prov}"
+        if self.citymun_name:
+            return re.sub(r"^city of\s+", "", self.citymun_name.strip(), flags=re.I)
+        if self.province_name:
+            return self.province_name.strip()
+        if self.location:
+            parts = [p.strip() for p in self.location.split(",") if p.strip()]
+            if len(parts) >= 3:
+                city = re.sub(r"^city of\s+", "", parts[1], flags=re.I)
+                return f"{city}, {parts[2]}"
+            elif len(parts) == 2:
+                city = re.sub(r"^city of\s+", "", parts[0], flags=re.I)
+                return f"{city}, {parts[1]}"
+            elif len(parts) == 1:
+                return parts[0]
+        return ""
+
     def __repr__(self):
         return f"<Subdivision {self.name}>"
 
@@ -382,6 +409,29 @@ class Property(db.Model):
     tripping_requests = db.relationship("TrippingRequest", back_populates="property_item")
     pricing_detail_requests = db.relationship("PropertyPricingDetailRequest", back_populates="property_item")
     sale_record      = db.relationship("PropertySale", back_populates="property_item", uselist=False)
+
+    @property
+    def city_province(self):
+        """Returns clean 'City, Province' e.g. 'Carmona, Cavite'."""
+        if self.citymun_name and self.province_name:
+            city = re.sub(r"^(?:City of|Municipality of)\s+", "", self.citymun_name.strip(), flags=re.I)
+            prov = self.province_name.strip()
+            return f"{city}, {prov}"
+        if self.citymun_name:
+            return re.sub(r"^(?:City of|Municipality of)\s+", "", self.citymun_name.strip(), flags=re.I)
+        if self.province_name:
+            return self.province_name.strip()
+        if self.location:
+            parts = [p.strip() for p in self.location.split(",") if p.strip()]
+            if len(parts) >= 3:
+                city = re.sub(r"^(?:City of|Municipality of)\s+", "", parts[1], flags=re.I)
+                return f"{city}, {parts[2]}"
+            elif len(parts) == 2:
+                city = re.sub(r"^(?:City of|Municipality of)\s+", "", parts[0], flags=re.I)
+                return f"{city}, {parts[1]}"
+            elif len(parts) == 1:
+                return parts[0]
+        return ""
 
     def __repr__(self):
         return f"<Property {self.name} @ {self.location}>"

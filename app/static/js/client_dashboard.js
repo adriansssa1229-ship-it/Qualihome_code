@@ -95,8 +95,21 @@
     var mBrgy = path.match(/\/api\/psgc\/barangays\?city_mun_code=([^&]+)/);
     var directUrl = '';
     if (path.indexOf('/api/psgc/regions') === 0) directUrl = apiBase + '/regions/';
-    else if (mReg) directUrl = apiBase + '/regions/' + decodeURIComponent(mReg[1]) + '/provinces/';
-    else if (mCity && mCity[1]) directUrl = apiBase + '/provinces/' + decodeURIComponent(mCity[1]) + '/cities-municipalities/';
+    else if (mReg) {
+      var rCode = decodeURIComponent(mReg[1]);
+      if (rCode === '130000000' || rCode.indexOf('13') === 0) {
+        return [{ code: '130000000', name: 'Metro Manila' }];
+      }
+      directUrl = apiBase + '/regions/' + rCode + '/provinces/';
+    }
+    else if (mCity && mCity[1]) {
+      var pCode = decodeURIComponent(mCity[1]);
+      if (pCode === '130000000' || pCode.indexOf('13') === 0) {
+        directUrl = apiBase + '/regions/' + pCode + '/cities-municipalities/';
+      } else {
+        directUrl = apiBase + '/provinces/' + pCode + '/cities-municipalities/';
+      }
+    }
     else if (mCity && mCity[2]) directUrl = apiBase + '/regions/' + decodeURIComponent(mCity[2]) + '/cities-municipalities/';
     else if (mBrgy) directUrl = apiBase + '/cities-municipalities/' + decodeURIComponent(mBrgy[1]) + '/barangays/';
     if (!directUrl) {
@@ -132,7 +145,7 @@
 
   function _getQualificationThresholds() {
     if (_qualThresholdCache) return _qualThresholdCache;
-    var defaults = { qualifiedMax: 35, conditionalMax: 42 };
+    var defaults = { qualifiedMax: 30, conditionalMax: 42 };
     var cfgEl = document.getElementById('qm-live-config');
     if (!cfgEl || !cfgEl.textContent) {
       _qualThresholdCache = defaults;
@@ -326,7 +339,11 @@
       }
 
       var provinces = await _psgcGet('/api/psgc/provinces?region_code=' + encodeURIComponent(regionSel.value));
-      _psgcFillSelect(provinceSel, provinces, '-- Select --', selectedProvinceCode || '');
+      var effProvinceCode = selectedProvinceCode;
+      if (!effProvinceCode && provinces && provinces.length === 1) {
+        effProvinceCode = provinces[0].code;
+      }
+      _psgcFillSelect(provinceSel, provinces, '-- Select --', effProvinceCode || '');
       psgcLog('info', 'Provinces loaded', {
         cascade: cfg.regionSelectId,
         regionCode: regionSel.value || '',
@@ -1031,16 +1048,31 @@
       var qualifiedGrid = document.getElementById('homeQualifiedGrid');
       var qualifiedEmpty = document.getElementById('homeQualifiedEmpty');
       if (qualifiedGrid && qualifiedEmpty) {
-        // 09/15/26: Qualified Models shows Qualified AND Conditionally Qualified
-        // (matches backend _is_affordable_any_term + server template). Hide only
-        // Not Qualified cards; the old check hid conditional cards too, which
-        // emptied the section for conditionally-qualified clients.
+        // Qualified Models: Client must be fully qualified for the 5-year loan term (income >= req['5']).
+        // Being qualified for 5 years guarantees qualification across 10, 15, and 20 years.
         var qVisible = 0;
         qualifiedGrid.querySelectorAll('.home-qualified-card-col').forEach(function (col) {
+          var card = col.querySelector('.prop-card');
+          var pricing = null;
+          try {
+            pricing = card && card.dataset.pricingJson ? JSON.parse(card.dataset.pricingJson) : null;
+          } catch (_) {
+            pricing = null;
+          }
+          var req = (pricing && pricing.required_monthly_income && typeof pricing.required_monthly_income === 'object')
+            ? pricing.required_monthly_income
+            : {};
+          var req5 = _toNumber(req['5']);
+          var isQualified5 = (req5 > 0 && clientIncome > 0)
+            ? (clientIncome >= req5)
+            : (String(card && card.dataset.propQualified || '0') === '1');
+
           var badge = col.querySelector('.js-home-qual-badge');
-          var isNotQualified = !!(badge && badge.classList.contains('badge-not-qualified'));
-          col.classList.toggle('d-none', isNotQualified);
-          if (!isNotQualified) qVisible += 1;
+          if (badge) {
+            _setBadgeStatus(badge, isQualified5 ? { label: 'Qualified', badgeClass: 'badge-qualified' } : { label: 'Not Qualified', badgeClass: 'badge-not-qualified' });
+          }
+          col.classList.toggle('d-none', !isQualified5);
+          if (isQualified5) qVisible += 1;
         });
         qualifiedEmpty.classList.toggle('d-none', qVisible > 0);
       }
@@ -1052,7 +1084,7 @@
         // (badge was recomputed by updateHomeCardBadge above). Show the
         // empty state when nothing remains visible.
         var rVisible = 0;
-        recommendedGrid.querySelectorAll('.col-12.col-sm-6.col-xl-4').forEach(function (col) {
+        recommendedGrid.querySelectorAll('.home-recommended-card-col, .col-12.col-sm-6.col-xl-4').forEach(function (col) {
           var badge = col.querySelector('.js-home-qual-badge');
           var isNotQualified = !!(badge && badge.classList.contains('badge-not-qualified'));
           col.classList.toggle('d-none', isNotQualified);
@@ -2531,11 +2563,6 @@
       document.getElementById('pvmReqIncomeBadge20'),
       _computeQualificationStatus(reqIncome['20'] || 0, clientIncome, false)
     );
-    setText('pvmProcessingFee', processingFee || '—');
-    setText('pvmOrPrNo', orPrNo || '—');
-    setText('pvmOrPrDate', orPrDate || '—');
-    setText('pvmDownpaymentTermAdmin', downpaymentTerm || '—');
-    setText('pvmLoanTermAdmin', loanTerm || '—');
   }
 
   function openPropDetail(card, options) {
@@ -2565,6 +2592,34 @@
     var isVisitedModel = String(card.dataset.visited || '0') === '1';
     var detailStatus = String(card.dataset.detailRequestStatus || 'none').toLowerCase();
     var effectiveDetailStatus = isBoughtModel ? 'approved' : detailStatus;
+    if (detailStatus === 'approved' && !isBoughtModel && card.dataset.propId) {
+      var _checkPid = card.dataset.propId;
+      fetch('/qualify/property/' + encodeURIComponent(_checkPid) + '/detail-status')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d && d.ok && !d.approved) {
+            document.querySelectorAll('.prop-card-clickable[data-prop-id="' + _checkPid + '"]').forEach(function(el) {
+              el.dataset.detailRequestStatus = 'none';
+              el.dataset.pricingApproved = '0';
+              var btn = el.querySelector('.prop-card-details-btn');
+              if (btn) {
+                btn.dataset.detailStatus = 'none';
+                btn.className = 'btn btn-outline-blue w-100 mt-2 prop-card-details-btn';
+                btn.innerHTML = '<i class="fas fa-file-signature me-1"></i> Request Full Details';
+              }
+            });
+            renderPricingBreakdown('none', null);
+            var detailsBtn = document.getElementById('pvmRequestDetailsBtn');
+            if (detailsBtn) {
+              detailsBtn.dataset.detailStatus = 'none';
+              detailsBtn.className = 'btn btn-outline-blue';
+              detailsBtn.innerHTML = '<i class="fas fa-file-signature me-1"></i> Request Full Details';
+              detailsBtn.classList.remove('d-none');
+            }
+          }
+        })
+        .catch(function() {});
+    }
     var pricingData = null;
     try {
       pricingData = card.dataset.pricingJson ? JSON.parse(card.dataset.pricingJson) : null;
@@ -2800,33 +2855,32 @@
     if (!modalEl) return;
     var ac = (agentContact && typeof agentContact === 'object') ? agentContact : {};
     var phone = String(ac.phone || '').trim();
-    var insta = String(ac.instagram || '').trim();
-    var viber = String(ac.viber || '').trim();
-    var whats = String(ac.whatsapp || '').trim();
     var agentName = String(ac.name || 'Ann Regar').trim();
 
     var nameEl = modalEl.querySelector('#crAgentName');
     if (nameEl) nameEl.textContent = agentName;
 
-    function setLink(id, href) {
-      var el = document.getElementById(id);
-      if (!el) return;
-      el.href = href;
-      var has = !!href && href !== '#';
-      el.classList.toggle('d-none', !has);
+    // Synchronize contact card links & values
+    var fbCard = modalEl.querySelector('#crContactFbCard');
+    if (fbCard) {
+      fbCard.href = 'https://web.facebook.com/annregarrealty1017/?_rdc=1&_rdr#';
     }
-    function digits(v) { return String(v || '').replace(/\D/g, ''); }
-    var intl = function (v) {
-      var d = digits(v);
-      if (d.length >= 12) return '63' + d.slice(-10);
-      if (d.length === 11 && d.charAt(0) === '0') return '63' + d.slice(1);
-      return '63' + d;
-    };
-    setLink('crFacebookBtn', '#');
-    setLink('crInstagramBtn', insta ? 'https://www.instagram.com/' + String(insta).replace(/^@/, '') : '#');
-    setLink('crViberBtn', viber ? 'viber://chat?number=%2B' + intl(viber) : '#');
-    setLink('crWhatsAppBtn', whats ? 'https://wa.me/' + intl(whats) : '#');
-    setLink('crPhoneBtn', phone ? 'tel:+' + intl(phone) : '#');
+
+    var emailCard = modalEl.querySelector('#crContactEmailCard');
+    if (emailCard) {
+      emailCard.href = 'mailto:annregar.realty@gmail.com';
+    }
+
+    var phoneCard = modalEl.querySelector('#crContactPhoneCard');
+    var phoneValEl = modalEl.querySelector('#crContactPhoneVal');
+    var activePhone = phone || '0917 861 7688';
+    if (phoneCard) {
+      var phoneDigits = activePhone.replace(/\D/g, '');
+      phoneCard.href = 'tel:' + (phoneDigits ? phoneDigits : '09178617688');
+    }
+    if (phoneValEl) {
+      phoneValEl.textContent = activePhone;
+    }
 
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
   }
@@ -2976,7 +3030,13 @@
     }
 
     // Reset fields
-    document.getElementById("tripDate").value  = "";
+    var tripDateEl = document.getElementById("tripDate");
+    if (tripDateEl) {
+      tripDateEl.value = "";
+      var now = new Date();
+      var localToday = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      tripDateEl.min = localToday;
+    }
     document.getElementById("tripTime").value  = "";
     const errEl = document.getElementById("tripModalError");
     if (errEl) errEl.classList.add("d-none");
@@ -3069,7 +3129,35 @@
     if ((status === 'none' || !status) && modalEl) status = String(modalEl.dataset.detailStatus || 'none').toLowerCase();
     if (!propId) return;
     if (status === 'approved') {
-      if (card) openPropDetail(card);
+      fetch('/qualify/property/' + encodeURIComponent(propId) + '/detail-status')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d && d.ok && !d.approved) {
+            document.querySelectorAll('.prop-card-clickable[data-prop-id="' + propId + '"]').forEach(function(el) {
+              el.dataset.detailRequestStatus = 'none';
+              el.dataset.pricingApproved = '0';
+              var btn = el.querySelector('.prop-card-details-btn');
+              if (btn) {
+                btn.dataset.detailStatus = 'none';
+                btn.className = 'btn btn-outline-blue w-100 mt-2 prop-card-details-btn';
+                btn.innerHTML = '<i class="fas fa-file-signature me-1"></i> Request Full Details';
+              }
+            });
+            var detailsBtn = document.getElementById('pvmRequestDetailsBtn');
+            if (detailsBtn) {
+              detailsBtn.dataset.detailStatus = 'none';
+              detailsBtn.className = 'btn btn-outline-blue';
+              detailsBtn.innerHTML = '<i class="fas fa-file-signature me-1"></i> Request Full Details';
+              detailsBtn.classList.remove('d-none');
+            }
+            toast('Your full details access for this property has been reset by admin. You may request details again.', 'info');
+          } else {
+            if (card) openPropDetail(card);
+          }
+        })
+        .catch(function() {
+          if (card) openPropDetail(card);
+        });
       return;
     }
     if (status === 'pending') {
@@ -3131,6 +3219,13 @@
 
       if (!propId || !date) {
         if (errEl) { errEl.textContent = "Please select a preferred date."; errEl.classList.remove("d-none"); }
+        return;
+      }
+
+      var now = new Date();
+      var localToday = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      if (date < localToday) {
+        if (errEl) { errEl.textContent = "Preferred date cannot be in the past. Please select today or a future date."; errEl.classList.remove("d-none"); }
         return;
       }
 
@@ -3482,9 +3577,14 @@
         return;
       }
 
+      var oldPass     = (document.getElementById('prof_old_password')     || {}).value || '';
       var newPass     = (document.getElementById('prof_new_password')     || {}).value || '';
       var confirmPass = (document.getElementById('prof_confirm_password') || {}).value || '';
       if (newPass) {
+        if (!oldPass) {
+          if (errEl) { errEl.textContent = 'Current password is required to set a new password.'; errEl.classList.remove('d-none'); }
+          return;
+        }
         if (newPass.length < 6) {
           if (errEl) { errEl.textContent = 'New password must be at least 6 characters.'; errEl.classList.remove('d-none'); }
           return;
@@ -3687,6 +3787,7 @@
       var saveBtn = document.getElementById('saveProfileBtn');
       if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving\u2026'; }
 
+      var oldPass = (document.getElementById('prof_old_password') || {}).value || '';
       var newPass = (document.getElementById('prof_new_password') || {}).value || '';
       function gv(id) { var el = document.getElementById(id); return el ? el.value : ''; }
 
@@ -3750,6 +3851,7 @@
         home_barangay_code: gv('prof_home_barangay_code'),
         home_barangay_name: gv('prof_home_barangay_name'),
       };
+      if (oldPass) payload.old_password = oldPass;
       if (newPass) payload.new_password = newPass;
 
       fetch('/profile/save', {
@@ -3766,7 +3868,7 @@
             return;
           }
           // Clear password fields
-          ['prof_new_password', 'prof_confirm_password'].forEach(function (id) {
+          ['prof_old_password', 'prof_new_password', 'prof_confirm_password'].forEach(function (id) {
             var el = document.getElementById(id); if (el) el.value = '';
           });
           // Reset checklist
@@ -4232,7 +4334,7 @@
         'prof_home_barangay_code', 'prof_home_barangay_name',
         'prof_home_region_select', 'prof_home_province_select', 'prof_home_citymun_select', 'prof_home_barangay_select'
       ];
-      var CLIENT_PROF_PW_FIELDS = ['prof_new_password', 'prof_confirm_password'];
+      var CLIENT_PROF_PW_FIELDS = ['prof_old_password', 'prof_new_password', 'prof_confirm_password'];
 
       // Snapshot field values on load so "Leave" can restore them
       var _profSnapshot = {};

@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}Agent Dashboard — QUALIHOME{% endblock %}
 {% block body_class %}page-dashboard{% endblock %}
 {% block footer %}{% endblock %}
@@ -1405,9 +1405,9 @@
                  data-prop-unit-type="{{ p.unit_type or '' }}"
                  data-unit-id="{{ p.unit_id or '' }}"
                  data-agent-id="{{ p.agent_id or '' }}"
-                 data-price="{{ p.price }}"
+                 data-price="{{ p.price|commas_input }}"
                  data-promo-discount-rate="{{ p.promo_discount_rate if p.promo_discount_rate is not none else '' }}"
-                 data-reservation-fee="{{ p.reservation_fee if p.reservation_fee is not none else '' }}"
+                 data-reservation-fee="{{ p.reservation_fee|commas_input if p.reservation_fee is not none else '' }}"
                  data-downpayment-rate="{{ p.downpayment_rate if p.downpayment_rate is not none else '' }}"
                  data-downpayment-terms-months="{{ p.downpayment_terms_months if p.downpayment_terms_months is not none else '' }}"
                  data-loanable-percentage="{{ p.loanable_percentage if p.loanable_percentage is not none else '' }}"
@@ -1541,9 +1541,9 @@
                  data-prop-unit-type="{{ p.unit_type or '' }}"
                  data-unit-id="{{ p.unit_id or '' }}"
                 data-agent-id="{{ p.agent_id or '' }}"
-                 data-price="{{ p.price }}"
+                 data-price="{{ p.price|commas_input }}"
                  data-promo-discount-rate="{{ p.promo_discount_rate if p.promo_discount_rate is not none else '' }}"
-                 data-reservation-fee="{{ p.reservation_fee if p.reservation_fee is not none else '' }}"
+                 data-reservation-fee="{{ p.reservation_fee|commas_input if p.reservation_fee is not none else '' }}"
                  data-downpayment-rate="{{ p.downpayment_rate if p.downpayment_rate is not none else '' }}"
                  data-downpayment-terms-months="{{ p.downpayment_terms_months if p.downpayment_terms_months is not none else '' }}"
                  data-loanable-percentage="{{ p.loanable_percentage if p.loanable_percentage is not none else '' }}"
@@ -1892,7 +1892,20 @@
               </div>
             </div>
             <div class="row g-3">
-              <div class="col-md-6">
+              <div class="col-12 col-md-4">
+                <label class="sqh-form-label"><i class="fas fa-key me-1 text-crimson"></i>Current Password</label>
+                <div class="input-group sqh-input-group">
+                  <span class="input-group-text sqh-ig-text"><i class="fas fa-key"></i></span>
+                  <input type="password" id="prof_old_password" class="form-control sqh-form-control"
+                         placeholder="Enter current password">
+                  <button type="button" class="btn sqh-eye-btn sqh-pw-toggle toggle-password" data-target="prof_old_password"
+                          tabindex="-1" aria-label="Toggle visibility">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+                <div class="sqh-live-error" id="prof_old_password_error"></div>
+              </div>
+              <div class="col-12 col-md-4">
                 <label class="sqh-form-label"><i class="fas fa-lock me-1 text-crimson"></i>New Password</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-lock"></i></span>
@@ -1912,7 +1925,7 @@
                 </ul>
                 <div class="sqh-live-error" id="prof_new_password_error"></div>
               </div>
-              <div class="col-md-6">
+              <div class="col-12 col-md-4">
                 <label class="sqh-form-label"><i class="fas fa-lock me-1 text-crimson"></i>Confirm New Password</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-lock"></i></span>

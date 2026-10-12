@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 from datetime import datetime
+from decimal import Decimal
 
 from flask import Flask
 from flask_login import LoginManager
@@ -171,6 +172,21 @@ def create_app(config_class=Config):
 			return value.strftime("%I:%M %p")
 		except Exception:
 			return str(value)
+
+	@app.template_filter("commas_input")
+	def commas_input_filter(val):
+		"""Format numeric values with commas and no trailing .00 for form inputs."""
+		if val is None or val == "":
+			return ""
+		try:
+			d = Decimal(str(val))
+			if d == 0:
+				return ""
+			if d == d.to_integral():
+				return f"{int(d):,}"
+			return f"{d:,.2f}"
+		except Exception:
+			return str(val)
 
 	# Register blueprints that are available in the current workspace state.
 	try:

@@ -12,7 +12,12 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "fallback-secret-key")
 
-    USE_SQLITE = os.environ.get("DB_USE_SQLITE", "true").lower() == "true"
+    has_remote_db = bool(os.environ.get("DATABASE_URL") or os.environ.get("MYSQL_URL"))
+    raw_use_sqlite = os.environ.get("DB_USE_SQLITE")
+    if raw_use_sqlite is not None:
+        USE_SQLITE = raw_use_sqlite.lower() == "true"
+    else:
+        USE_SQLITE = not has_remote_db
 
     if USE_SQLITE:
         # Default development database.
@@ -21,15 +26,21 @@ class Config:
         )
         SQLALCHEMY_ENGINE_OPTIONS = {}
     else:
-        DB_HOST = os.environ.get("DB_HOST", "localhost")
-        DB_PORT = os.environ.get("DB_PORT", "3306")
-        DB_USER = os.environ.get("DB_USER", "root")
-        DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-        DB_NAME = os.environ.get("DB_NAME", "smartqualihome")
-        SQLALCHEMY_DATABASE_URI = (
-            f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-            "?charset=utf8mb4"
-        )
+        database_url = os.environ.get("DATABASE_URL") or os.environ.get("MYSQL_URL")
+        if database_url:
+            if database_url.startswith("mysql://"):
+                database_url = database_url.replace("mysql://", "mysql+pymysql://", 1)
+            SQLALCHEMY_DATABASE_URI = database_url
+        else:
+            DB_HOST = os.environ.get("DB_HOST", "localhost")
+            DB_PORT = os.environ.get("DB_PORT", "3306")
+            DB_USER = os.environ.get("DB_USER", "root")
+            DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+            DB_NAME = os.environ.get("DB_NAME", "smartqualihome")
+            SQLALCHEMY_DATABASE_URI = (
+                f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+                "?charset=utf8mb4"
+            )
 
         engine_options = {
             "pool_pre_ping": True,
@@ -41,12 +52,29 @@ class Config:
         }
 
         # Aiven (and most managed MySQL providers) require TLS connections.
-        # DB_SSL_CA should point to a CA cert file path, e.g. Render's
-        # "Secret File" mount at /etc/secrets/aiven-ca.pem, or a local path
-        # such as instance/aiven-ca.pem for XAMPP/dev use.
-        DB_SSL_CA = os.environ.get("DB_SSL_CA", "")
-        if DB_SSL_CA:
-            engine_options["connect_args"] = {"ssl": {"ca": DB_SSL_CA}}
+        # DB_SSL_CA can point to a CA cert file path (e.g., Render's /etc/secrets/aiven-ca.pem,
+        # a relative path like aiven-ca.pem in the project root, or instance/aiven-ca.pem).
+        raw_ssl_ca = os.environ.get("DB_SSL_CA", "").strip()
+        resolved_ssl_ca = None
+        if raw_ssl_ca:
+            if os.path.exists(raw_ssl_ca):
+                resolved_ssl_ca = os.path.abspath(raw_ssl_ca)
+            else:
+                root_ca = os.path.abspath(os.path.join(BASE_DIR, "..", os.path.basename(raw_ssl_ca)))
+                instance_ca = os.path.abspath(os.path.join(BASE_DIR, "..", "instance", os.path.basename(raw_ssl_ca)))
+                if os.path.exists(root_ca):
+                    resolved_ssl_ca = root_ca
+                elif os.path.exists(instance_ca):
+                    resolved_ssl_ca = instance_ca
+
+        # Automatic fallback: if not specified or not resolved, look for aiven-ca.pem in project root
+        if not resolved_ssl_ca:
+            default_ca = os.path.abspath(os.path.join(BASE_DIR, "..", "aiven-ca.pem"))
+            if os.path.exists(default_ca):
+                resolved_ssl_ca = default_ca
+
+        if resolved_ssl_ca:
+            engine_options["connect_args"] = {"ssl": {"ca": resolved_ssl_ca}}
 
         SQLALCHEMY_ENGINE_OPTIONS = engine_options
 

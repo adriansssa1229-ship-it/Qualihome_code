@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}{% if result %}Registration Complete{% else %}Get Qualified{% endif %} — QUALIHOME{% endblock %}
 
 {% block content %}
@@ -117,7 +117,7 @@
               <div class="{{ dti_class }} result-dti-fill" data-width="{{ dti_width }}"></div>
             </div>
             <div class="d-flex justify-content-between mt-1" style="font-size:.65rem;color:var(--clr-muted);">
-              <span>0%</span><span>35%</span><span>42%</span><span>100%</span>
+              <span>0%</span><span>30%</span><span>42%</span><span>100%</span>
             </div>
           </div>
         </div>
@@ -264,6 +264,11 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
         <form method="POST" action="{{ url_for('auth.register') }}" enctype="multipart/form-data"
             novalidate id="gqForm">
           {{ form.hidden_tag() }}
+
+          <!-- Anti-bot Honeypot Trap (invisible to real users) -->
+          <div style="display:none !important; visibility:hidden !important; position:absolute; left:-9999px;" aria-hidden="true">
+            <input type="text" name="user_website_trap" tabindex="-1" autocomplete="off">
+          </div>
 
           <!-- ══════════ STEP 1 — Personal Info ══════════ -->
           <div class="gq-step-panel" id="gqPanel1">
@@ -563,7 +568,7 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
                 </div>
                 <div class="dti-zones">
                   <span>0%</span>
-                  <span style="color:var(--clr-accent-dk);font-weight:600;">35% — Safe</span>
+                  <span style="color:var(--clr-accent-dk);font-weight:600;">30% — Safe</span>
                   <span style="color:var(--clr-amber-dk);font-weight:600;">42% — Caution</span>
                   <span>100%</span>
                 </div>
@@ -685,7 +690,7 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
                 <span class="gq-sub-num">3A</span>
                 <div>
                   <div class="gq-sub-title">Document Honesty Check</div>
-                  <div class="gq-sub-desc">Optional upload, required declaration</div>
+                  <div class="gq-sub-desc">Required declaration of document availability</div>
                 </div>
               </div>
 
@@ -716,28 +721,6 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
                     <div class="invalid-feedback d-block">{{ err }}</div>
                   {% endfor %}
                   <div class="sqh-live-error" id="has_income_proof_error"></div>
-                </div>
-
-                <div class="col-md-6">
-                  <label class="sqh-form-label" for="valid_id_file">
-                    Upload Valid ID (Optional)
-                  </label>
-                  <div class="input-group sqh-input-group">
-                    <span class="input-group-text sqh-ig-text"><i class="fas fa-upload text-muted"></i></span>
-                    <input class="form-control sqh-form-control" type="file" id="valid_id_file" name="valid_id_file" accept=".jpg,.jpeg,.png,.webp,.pdf">
-                  </div>
-                  <div class="form-text small text-muted">Allowed: JPG, PNG, WEBP, PDF</div>
-                </div>
-
-                <div class="col-md-6">
-                  <label class="sqh-form-label" for="income_proof_file">
-                    Upload Proof of Income (Optional)
-                  </label>
-                  <div class="input-group sqh-input-group">
-                    <span class="input-group-text sqh-ig-text"><i class="fas fa-upload text-muted"></i></span>
-                    <input class="form-control sqh-form-control" type="file" id="income_proof_file" name="income_proof_file" accept=".jpg,.jpeg,.png,.webp,.pdf">
-                  </div>
-                  <div class="form-text small text-muted">Allowed: JPG, PNG, WEBP, PDF</div>
                 </div>
               </div>
             </div>
@@ -965,7 +948,7 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
   var phoneRe    = /^09\d{9}$/;
 
   var gqLiveCfg = {
-    dti_qualified_max: 35,
+    dti_qualified_max: 30,
     dti_conditional_max: 42,
     min_tenure_months: 6,
     stability_scores: {
@@ -1009,7 +992,7 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
     emailTimer: null,
   };
 
-  var GQ_CACHE_KEY = 'gq_register_session_v1';
+  var GQ_CACHE_KEY = 'gq_register_session_v2';
   var GQ_FIELD_IDS = [
     'first_name', 'middle_name', 'last_name', 'username', 'email', 'contact_number', 'civil_status', 'citizenship', 'gender', 'dependents', 'birth_date', 'password', 'confirm_password',
     'gross_monthly_income', 'monthly_debt_loans', 'employment_status', 'tenure_months', 'age', 'sss_gsis_umid', 'tin_no',
@@ -1054,7 +1037,13 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
       var fields = payload.fields || {};
       Object.keys(fields).forEach(function (id) {
         var el = document.getElementById(id);
-        if (el) el.value = fields[id];
+        if (el) {
+          var val = fields[id];
+          if ((id === 'budget_min' || id === 'budget_max' || id === 'monthly_debt_loans') && (val === '0.00' || val === '0')) {
+            return;
+          }
+          el.value = val;
+        }
       });
       return parseInt(payload.step || '1', 10) || 1;
     } catch (_) {
@@ -1477,7 +1466,7 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
     }
 
     var pct = Math.min(Math.max(basePct - stabilityRelief - tenureRelief + agePenalty, 0), 100);
-    var safeLimit = parseFloat(gqLiveCfg.dti_qualified_max || 35);
+    var safeLimit = parseFloat(gqLiveCfg.dti_qualified_max || 30);
     var cautionLimit = parseFloat(gqLiveCfg.dti_conditional_max || 42);
     var details = {
       gross_monthly_income: g,
@@ -1502,12 +1491,11 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
       return;
     }
     if (dtiWrap) dtiWrap.style.display = 'block';
-    debugLog('Adjusted DTI formula computed with employment stability + tenure + age', details);
-    var cls = pct < safeLimit ? 'dti-safe' : pct <= cautionLimit ? 'dti-caution' : 'dti-danger';
-    var sidebarBg   = pct < 35 ? 'var(--clr-accent)' : pct <= 42 ? 'var(--clr-warning)' : 'var(--clr-primary)';
-    var sidebarText = pct < 35 ? '✓ Safe DTI range' : pct <= 42 ? '⚠ Borderline — caution' : '✗ High DTI — reduce obligations';
+    var cls = pct <= safeLimit ? 'dti-safe' : pct <= cautionLimit ? 'dti-caution' : 'dti-danger';
+    var sidebarBg   = pct <= safeLimit ? 'var(--clr-accent)' : pct <= cautionLimit ? 'var(--clr-warning)' : 'var(--clr-primary)';
+    var sidebarText = pct <= safeLimit ? '✓ Safe DTI range' : pct <= cautionLimit ? '⚠ Borderline — caution' : '✗ High DTI — reduce obligations';
 
-    if (pct < safeLimit) {
+    if (pct <= safeLimit) {
       sidebarBg = 'var(--clr-accent)';
       sidebarText = '✓ Safe DTI range';
     } else if (pct <= cautionLimit) {

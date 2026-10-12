@@ -100,13 +100,11 @@
                   </div>
                 </div>
 
-                {% if demo_otp %}
-                <div class="alert alert-info py-2 px-3 small mb-3 text-center" id="demoOtpAlert" style="border-radius: 10px; background: rgba(26,38,153,.07); border: 1px solid rgba(26,38,153,.2); color: #1a2699;">
+                <div class="alert alert-info py-2 px-3 small mb-3 text-center" id="demoOtpAlert" style="border-radius: 10px; background: rgba(26,38,153,.07); border: 1px solid rgba(26,38,153,.2); color: #1a2699; {% if not demo_otp %}display: none;{% endif %}">
                   <i class="fas fa-key me-1"></i>
-                  <strong>Verification Code:</strong> <span class="fw-bold fs-6 text-dark ms-1 font-monospace" id="demoOtpCode" style="letter-spacing: 2px;">{{ demo_otp }}</span>
+                  <strong>Verification Code:</strong> <span class="fw-bold fs-6 text-dark ms-1 font-monospace" id="demoOtpCode" style="letter-spacing: 2px;">{{ demo_otp or '' }}</span>
                   <div class="text-muted" style="font-size: 0.72rem;">(Cloud SMTP restricted on free trial port 587 &bull; code provided for thesis evaluation)</div>
                 </div>
-                {% endif %}
 
                 <button type="submit" class="btn btn-lime-auth w-100 py-2 mb-3 fw-bold" id="verifyBtn">
                   <i class="fas fa-check-circle me-1"></i> Verify &amp; Activate Account
@@ -216,10 +214,16 @@ document.addEventListener('DOMContentLoaded', function () {
           statusDiv.style.display = 'block';
           startCooldown(60);
 
-          if (resp.data.demo_otp) {
+          var demoAlert = document.getElementById('demoOtpAlert');
+          if (resp.data.delivered) {
+            if (demoAlert) { demoAlert.style.display = 'none'; }
+          } else if (resp.data.demo_otp) {
             var demoCodeEl = document.getElementById('demoOtpCode');
             if (demoCodeEl) {
               demoCodeEl.textContent = resp.data.demo_otp;
+            }
+            if (demoAlert) {
+              demoAlert.style.display = 'block';
             }
           }
 

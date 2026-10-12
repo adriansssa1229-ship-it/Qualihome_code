@@ -147,18 +147,30 @@ def _is_email_verification_enabled() -> bool:
     return True
 
 
-def _send_via_brevo_api(api_key: str, to_email: str, subject: str, html_body: str, from_addr: str) -> tuple[bool, str | None]:
+def _send_via_brevo_api(api_key: str, to_email: str, subject: str, html_body: str, from_addr: str, text_body: str = "") -> tuple[bool, str | None]:
     import urllib.request
+    import urllib.error
     import json
     try:
-        sender_email = from_addr.split("<")[-1].replace(">", "").strip() if "<" in from_addr else from_addr
-        sender_name = from_addr.split("<")[0].strip() if "<" in from_addr else "QUALIHOME"
+        sender_email = (
+            os.environ.get("BREVO_SENDER_EMAIL")
+            or os.environ.get("BREVO_FROM_EMAIL")
+            or (from_addr.split("<")[-1].replace(">", "").strip() if "<" in from_addr else from_addr)
+        ).strip()
+        sender_name = (
+            os.environ.get("BREVO_SENDER_NAME")
+            or (from_addr.split("<")[0].strip() if "<" in from_addr else "")
+            or "QUALIHOME"
+        ).strip()
         payload = {
-            "sender": {"name": sender_name or "QUALIHOME", "email": sender_email},
+            "sender": {"name": sender_name, "email": sender_email},
             "to": [{"email": to_email}],
             "subject": subject,
             "htmlContent": html_body,
         }
+        if text_body:
+            payload["textContent"] = text_body
+
         req = urllib.request.Request(
             "https://api.brevo.com/v3/smtp/email",
             data=json.dumps(payload).encode("utf-8"),
@@ -169,10 +181,17 @@ def _send_via_brevo_api(api_key: str, to_email: str, subject: str, html_body: st
             },
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=12) as resp:
             if resp.status in (200, 201):
                 return True, None
             return False, f"Brevo HTTP {resp.status}"
+    except urllib.error.HTTPError as exc:
+        try:
+            err_body = exc.read().decode("utf-8", errors="ignore")
+        except Exception:
+            err_body = str(exc)
+        current_app.logger.warning("Brevo API HTTPError %s: %s", exc.code, err_body)
+        return False, f"Brevo HTTP {exc.code}: {err_body}"
     except Exception as exc:
         current_app.logger.warning("Brevo API send failed: %s", exc)
         return False, str(exc)
@@ -268,7 +287,7 @@ def _send_otp_email(to_email: str, otp_code: str, first_name: str = "") -> tuple
     # 1. Try Brevo HTTP API (Port 443 — bypasses Railway SMTP port blocks)
     brevo_key = (os.environ.get("BREVO_API_KEY") or cfg.get("BREVO_API_KEY") or "").strip()
     if brevo_key:
-        ok, err = _send_via_brevo_api(brevo_key, to_email, subject, html_body, from_addr)
+        ok, err = _send_via_brevo_api(brevo_key, to_email, subject, html_body, from_addr, text_body)
         if ok:
             return True, None
         current_app.logger.warning("Brevo API failed: %s; falling back to SMTP", err)
@@ -562,11 +581,12 @@ def register():
             session["pending_verify_user_id"] = user.id
             session["pending_verify_email"] = user.email
             session["otp_sent_at"] = datetime.now(timezone.utc).timestamp()
+            session["otp_delivery_failed"] = not sent
             if sent:
-                flash(f"A 6-digit verification code has been sent to {user.email}. Please enter it to activate your account.", "info")
+                flash(f"A 6-digit verification code has been sent to {user.email}. Please check your inbox.", "info")
             else:
                 current_app.logger.warning("Failed to send OTP email to %s: %s", user.email, mail_err)
-                flash("Account created! If you do not see the email, click 'Resend Code'.", "warning")
+                flash("Account created! Verification code provided below for thesis evaluation (cloud SMTP restricted).", "info")
             return redirect(url_for("auth.verify_otp"))
         else:
             # 6. Show result page (user must sign in manually)
@@ -660,7 +680,8 @@ def verify_otp():
         flash(f"Email verified successfully! Welcome to QUALIHOME, {user.first_name}!", "success")
         return redirect(_dashboard_url(user.role))
 
-    return render_template("auth/verify_otp.html", email=user.email, demo_otp=user.otp_code)
+    show_demo = user.otp_code if session.get("otp_delivery_failed", False) else None
+    return render_template("auth/verify_otp.html", email=user.email, demo_otp=show_demo)
 
 
 @auth_bp.route("/resend-otp", methods=["POST"])
@@ -690,13 +711,19 @@ def resend_otp():
 
     sent, mail_err = _send_otp_email(user.email, otp, user.first_name)
     session["otp_sent_at"] = now_ts
+    session["otp_delivery_failed"] = not sent
 
     if sent:
-        return jsonify({"ok": True, "message": "A new 6-digit verification code was sent to your Gmail."})
+        return jsonify({
+            "ok": True,
+            "delivered": True,
+            "message": f"A new 6-digit verification code was sent to {user.email}.",
+        })
     else:
         return jsonify({
             "ok": True,
-            "message": f"Code refreshed: {otp} (Cloud SMTP blocked by Railway)",
+            "delivered": False,
+            "message": f"Code refreshed: {otp} (Cloud SMTP restricted by Railway)",
             "demo_otp": otp,
         })
 

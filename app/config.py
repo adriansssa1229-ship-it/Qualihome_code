@@ -67,18 +67,11 @@ class Config:
                 elif os.path.exists(instance_ca):
                     resolved_ssl_ca = instance_ca
 
-        # Automatic fallback: if not specified or not resolved, look for aiven-ca.pem in project root
-        if not resolved_ssl_ca:
-            default_ca = os.path.abspath(os.path.join(BASE_DIR, "..", "aiven-ca.pem"))
-            if os.path.exists(default_ca):
-                resolved_ssl_ca = default_ca
-
         if resolved_ssl_ca:
             engine_options["connect_args"] = {"ssl": {"ca": resolved_ssl_ca}}
         else:
-            # Railway internal private network (mysql.railway.internal) uses an isolated
-            # container network and does not require TLS. Disabling client SSL avoids
-            # self-signed certificate verification failures.
+            # Railway internal network (mysql.railway.internal) and local XAMPP do not
+            # use a CA certificate. Disabling client SSL avoids certificate verification errors.
             engine_options["connect_args"] = {"ssl_disabled": True}
 
         SQLALCHEMY_ENGINE_OPTIONS = engine_options

@@ -458,11 +458,13 @@ def register():
         )
         db.session.add(result)
         proof_summary = []
-        proof_summary.append("valid ID uploaded" if valid_id_doc else "valid ID declared")
-        proof_summary.append("income proof uploaded" if income_proof_doc else "income proof declared")
+        if getattr(form, "has_valid_id", None) and form.has_valid_id.data:
+            proof_summary.append(f"valid ID: {form.has_valid_id.data}")
+        if getattr(form, "has_income_proof", None) and form.has_income_proof.data:
+            proof_summary.append(f"income proof: {form.has_income_proof.data}")
         log_activity(
             "register_documents",
-            f"Registration declarations captured ({', '.join(proof_summary)}).",
+            f"Registration honesty declaration captured ({', '.join(proof_summary) or 'declared'}).",
             actor=user,
         )
         log_activity("assessment",

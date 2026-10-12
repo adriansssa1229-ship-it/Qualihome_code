@@ -75,6 +75,10 @@ class Config:
 
         if resolved_ssl_ca:
             engine_options["connect_args"] = {"ssl": {"ca": resolved_ssl_ca}}
+        else:
+            engine_options["connect_args"] = {
+                "ssl": {"check_hostname": False, "verify_mode": False}
+            }
 
         SQLALCHEMY_ENGINE_OPTIONS = engine_options
 

@@ -83,56 +83,6 @@ def _get_security_int(key: str, fallback: int) -> int:
     return value
 
 
-def _send_reset_email(to_email: str, reset_url: str) -> tuple[bool, str | None]:
-    cfg = current_app.config
-    server = (cfg.get("MAIL_SERVER") or "").strip()
-    username = (cfg.get("MAIL_USERNAME") or "").strip()
-    password = cfg.get("MAIL_PASSWORD") or ""
-    from_addr = (cfg.get("MAIL_FROM") or username or "no-reply@qualihome.local").strip()
-    if not server or not username or not password:
-        return False, "Missing SMTP configuration (server/username/password)."
-
-    subject = "QUALIHOME Password Reset"
-    text_body = (
-        "We received a request to reset your QUALIHOME password.\n\n"
-        f"Open this link to reset your password:\n{reset_url}\n\n"
-        "This link expires in 1 hour. If you did not request this, you can ignore this email."
-    )
-    html_body = (
-        "<p>We received a request to reset your <strong>QUALIHOME</strong> password.</p>"
-        f"<p><a href=\"{reset_url}\">Reset your password</a></p>"
-        "<p>This link expires in <strong>1 hour</strong>. If you did not request this, you can ignore this email.</p>"
-    )
-
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = from_addr
-    msg["To"] = to_email
-    msg.set_content(text_body)
-    msg.add_alternative(html_body, subtype="html")
-
-    port = int(cfg.get("MAIL_PORT", 587))
-    use_ssl = bool(cfg.get("MAIL_USE_SSL", False))
-    use_tls = bool(cfg.get("MAIL_USE_TLS", True))
-    try:
-        if use_ssl:
-            with smtplib.SMTP_SSL(server, port, context=ssl.create_default_context(), timeout=15) as smtp:
-                smtp.login(username, password)
-                smtp.send_message(msg)
-        else:
-            with smtplib.SMTP(server, port, timeout=15) as smtp:
-                smtp.ehlo()
-                if use_tls:
-                    smtp.starttls(context=ssl.create_default_context())
-                    smtp.ehlo()
-                smtp.login(username, password)
-                smtp.send_message(msg)
-        return True, None
-    except Exception as exc:
-        current_app.logger.exception("Failed to send password reset email.")
-        return False, str(exc)
-
-
 def _is_email_verification_enabled() -> bool:
     """Returns True if admin requires OTP email verification on registration."""
     env_setting = os.environ.get("EMAIL_VERIFICATION_ENABLED")
@@ -224,6 +174,107 @@ def _send_via_resend_api(api_key: str, to_email: str, subject: str, html_body: s
             return False, f"Resend HTTP {resp.status}"
     except Exception as exc:
         current_app.logger.warning("Resend API send failed: %s", exc)
+        return False, str(exc)
+
+
+def _send_reset_email(to_email: str, reset_url: str) -> tuple[bool, str | None]:
+    cfg = current_app.config
+    subject = "QUALIHOME Password Reset"
+    text_body = (
+        "We received a request to reset your QUALIHOME password.\n\n"
+        f"Open this link to reset your password:\n{reset_url}\n\n"
+        "This link expires in 1 hour. If you did not request this, you can ignore this email.\n\n"
+        "— Annregar Realty & QUALIHOME Team"
+    )
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #f7f9fc; margin: 0; padding: 20px; }}
+    .container {{ max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }}
+    .header {{ background: #7d1a1a; padding: 24px 20px; text-align: center; }}
+    .header h1 {{ color: #ffffff; margin: 0; font-size: 24px; letter-spacing: 1px; font-weight: 800; }}
+    .header p {{ color: #fbd38d; margin: 5px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; }}
+    .content {{ padding: 30px 24px; color: #2d3748; line-height: 1.6; }}
+    .greeting {{ font-size: 18px; font-weight: 700; color: #1a202c; margin-bottom: 12px; }}
+    .btn-wrap {{ text-align: center; margin: 26px 0; }}
+    .btn-reset {{ display: inline-block; background-color: #7d1a1a; color: #ffffff !important; padding: 12px 28px; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 8px; }}
+    .footer {{ background: #edf2f7; padding: 16px 20px; text-align: center; font-size: 12px; color: #718096; border-top: 1px solid #e2e8f0; }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>QUALIHOME</h1>
+      <p>Annregar Realty &bull; Account Security</p>
+    </div>
+    <div class="content">
+      <div class="greeting">Reset Your Password</div>
+      <p>We received a request to reset your QUALIHOME account password. Click the button below to choose a new password:</p>
+      <div class="btn-wrap">
+        <a href="{reset_url}" class="btn-reset">Reset My Password</a>
+      </div>
+      <p style="font-size: 13px; color: #718096;">This password reset link is valid for <strong>1 hour</strong>. If you did not make this request, you can safely ignore this email.</p>
+    </div>
+    <div class="footer">
+      &copy; 2026 QUALIHOME &bull; Annregar Realty. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>"""
+
+    from_addr = (cfg.get("MAIL_FROM") or cfg.get("MAIL_USERNAME") or "no-reply@qualihome.local").strip()
+
+    # 1. Try Brevo HTTP API (Port 443 — bypasses Railway SMTP port blocks)
+    brevo_key = (os.environ.get("BREVO_API_KEY") or cfg.get("BREVO_API_KEY") or "").strip()
+    if brevo_key:
+        ok, err = _send_via_brevo_api(brevo_key, to_email, subject, html_body, from_addr, text_body)
+        if ok:
+            return True, None
+        current_app.logger.warning("Brevo API reset email failed: %s; falling back to SMTP", err)
+
+    # 2. Try Resend HTTP API
+    resend_key = (os.environ.get("RESEND_API_KEY") or cfg.get("RESEND_API_KEY") or "").strip()
+    if resend_key:
+        ok, err = _send_via_resend_api(resend_key, to_email, subject, html_body, from_addr)
+        if ok:
+            return True, None
+        current_app.logger.warning("Resend API reset email failed: %s; falling back to SMTP", err)
+
+    # 3. SMTP fallback
+    server = (cfg.get("MAIL_SERVER") or "").strip()
+    username = (cfg.get("MAIL_USERNAME") or "").strip()
+    password = cfg.get("MAIL_PASSWORD") or ""
+    if not server or not username or not password:
+        return False, "Missing SMTP configuration (server/username/password)."
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg.set_content(text_body)
+    msg.add_alternative(html_body, subtype="html")
+
+    port = int(cfg.get("MAIL_PORT", 587))
+    use_ssl = bool(cfg.get("MAIL_USE_SSL", False))
+    use_tls = bool(cfg.get("MAIL_USE_TLS", True))
+    try:
+        if use_ssl:
+            with smtplib.SMTP_SSL(server, port, context=ssl.create_default_context(), timeout=10) as smtp:
+                smtp.login(username, password)
+                smtp.send_message(msg)
+        else:
+            with smtplib.SMTP(server, port, timeout=10) as smtp:
+                smtp.ehlo()
+                if use_tls:
+                    smtp.starttls(context=ssl.create_default_context())
+                    smtp.ehlo()
+                smtp.login(username, password)
+                smtp.send_message(msg)
+        return True, None
+    except Exception as exc:
+        current_app.logger.warning("Failed to send password reset email via SMTP: %s", exc)
         return False, str(exc)
 
 

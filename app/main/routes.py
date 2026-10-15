@@ -991,7 +991,7 @@ def client_dashboard():
     qualified_props = []
     recommended_props = []
 
-    if qual_result and (qual_result.status or "").strip().lower() != "not qualified":
+    if qual_result:
         max_loanable_val = float(qual_result.max_loanable) if (qual_result.max_loanable and float(qual_result.max_loanable) > 0) else None
         bmin = float(profile.budget_min) if (profile and profile.budget_min and float(profile.budget_min) > 0) else None
         bmax = float(profile.budget_max) if (profile and profile.budget_max and float(profile.budget_max) > 0) else None
@@ -1023,6 +1023,11 @@ def client_dashboard():
                 continue
 
             recommended_props.append(p)
+
+        # Fallback for recommendations: if budget filter was too narrow and produced 0 recommendations,
+        # recommend the properties affordable within loanable amount / income
+        if not recommended_props and qualified_props:
+            recommended_props = list(qualified_props)
 
         # Qualified models: sort by price ascending
         qualified_props.sort(key=lambda p: (float(p.price) if p.price is not None else 0.0))

@@ -65,12 +65,28 @@ function showToast(message, type, title) {
 }
 
 // ── Image source resolution (Cloudinary-aware) ──────────────────
-// Absolute URLs (Cloudinary) are used directly; legacy local
-// filenames are served through /uploads/.
+// Absolute URLs (Cloudinary) and root/special URIs (/path, blob:, data:)
+// are used directly; legacy local filenames are served through /uploads/.
 function sqhImgSrc(ref) {
   ref = String(ref == null ? '' : ref).trim();
-  if (/^https?:\/\//i.test(ref)) return ref;
+  if (!ref) return '';
+  if (/^(?:https?:|\/|blob:|data:)/i.test(ref)) return ref;
   return '/uploads/' + encodeURIComponent(ref);
+}
+
+// ── Extract background image URL helper ────────────────────────
+function sqhExtractBgUrl(el) {
+  if (!el) return '';
+  if (el.dataset && el.dataset.bannerUrl) return el.dataset.bannerUrl;
+  var bg = (el.style && el.style.backgroundImage) || (window.getComputedStyle ? window.getComputedStyle(el).backgroundImage : '') || '';
+  if (!bg || bg === 'none') return '';
+  var m = bg.match(/url\((['"]?)(.*?)\1\)/i);
+  var url = (m && m[2] && m[2] !== 'none') ? m[2].trim() : '';
+  if (!url) {
+    var raw = bg.replace(/^url\(['"]?/, '').replace(/['"]?\)$/, '').trim();
+    if (raw && raw !== 'none') url = raw;
+  }
+  return url;
 }
 
 // ── Numeric input formatting (thousands separators) ──────────────
@@ -411,13 +427,25 @@ window.SqhImageCache = (function () {
     var url = sqhOptimizedSrc(ref);
     if (!imgEl || !url) { if (typeof done === 'function') done(); return; }
     if (imgEl.getAttribute('src') === url) { if (typeof done === 'function') done(); return; }
+    if (ready[url] || !imgEl.getAttribute('src')) {
+      imgEl.src = url;
+      if (ready[url]) {
+        if (typeof done === 'function') done();
+        return;
+      }
+    }
     var im = new Image();
     im.onload = function () {
       ready[url] = true;
+      delete pending[url];
       imgEl.src = url;
       if (typeof done === 'function') done();
     };
-    im.onerror = function () { if (typeof done === 'function') done(); };
+    im.onerror = function () {
+      delete pending[url];
+      imgEl.src = url;
+      if (typeof done === 'function') done();
+    };
     im.src = url;
   }
   function isReady(ref) { return !!ready[sqhOptimizedSrc(ref)]; }

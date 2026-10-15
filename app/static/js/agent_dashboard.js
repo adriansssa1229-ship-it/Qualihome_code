@@ -2165,6 +2165,7 @@ document.getElementById('bannerFileInput') && document.getElementById('bannerFil
         banner.style.backgroundImage    = 'url(\'' + freshBannerUrl + '\')';
         banner.style.backgroundSize     = 'cover';
         banner.style.backgroundPosition = 'center';
+        banner.dataset.bannerUrl        = freshBannerUrl;
       }
       // Show preview button
       var prevBtn = document.getElementById('bannerPreviewBtn');
@@ -2210,7 +2211,10 @@ document.getElementById('bannerFileInput') && document.getElementById('bannerFil
     var titleEl = document.getElementById('imgPreviewTitle');
     var imgEl   = document.getElementById('imgPreviewSrc');
     if (titleEl) titleEl.textContent = title;
-    if (imgEl)   SqhImageCache.swap(imgEl, imgUrl);
+    if (imgEl) {
+      imgEl.src = sqhOptimizedSrc(imgUrl);
+      SqhImageCache.swap(imgEl, imgUrl);
+    }
     _setPreviewActionsVisible(true);
     agentZoomCtrl.resetZoom();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('imgPreviewModal')).show();
@@ -2219,7 +2223,10 @@ document.getElementById('bannerFileInput') && document.getElementById('bannerFil
   function openReadOnlyPreview(imgUrl, sourceModalId) {
     _previewType = null;
     var imgEl = document.getElementById('imgPreviewSrc');
-    if (imgEl) SqhImageCache.swap(imgEl, imgUrl);
+    if (imgEl) {
+      imgEl.src = sqhOptimizedSrc(imgUrl);
+      SqhImageCache.swap(imgEl, imgUrl);
+    }
     _setPreviewActionsVisible(false);
     agentZoomCtrl.resetZoom();
     var previewModalEl = document.getElementById('imgPreviewModal');
@@ -2297,10 +2304,8 @@ document.getElementById('bannerFileInput') && document.getElementById('bannerFil
       e.stopPropagation();
       var banner = document.getElementById('profHeroBanner');
       if (!banner) return;
-      // Extract URL from background-image style
-      var bg  = banner.style.backgroundImage || '';
-      var match = bg.match(/url\(['"]?([^'"\)]+)['"]?\)/);
-      if (match) openPreview('banner', 'Cover Photo', match[1]);
+      var url = sqhExtractBgUrl(banner);
+      if (url) openPreview('banner', 'Cover Photo', url);
     });
   }
 
@@ -2347,6 +2352,7 @@ document.getElementById('bannerFileInput') && document.getElementById('bannerFil
               banner.style.backgroundImage    = '';
               banner.style.backgroundSize     = '';
               banner.style.backgroundPosition = '';
+              delete banner.dataset.bannerUrl;
             }
             var prevBtn = document.getElementById('bannerPreviewBtn');
             if (prevBtn) prevBtn.style.display = 'none';

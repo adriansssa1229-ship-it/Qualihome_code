@@ -6394,6 +6394,7 @@ document.getElementById('adminBannerFileInput') && document.getElementById('admi
         banner.style.backgroundImage    = 'url(\'' + freshBannerUrl + '\')';
         banner.style.backgroundSize     = 'cover';
         banner.style.backgroundPosition = 'center';
+        banner.dataset.bannerUrl        = freshBannerUrl;
       }
       var prevBtn = document.getElementById('adminBannerPreviewBtn');
       if (prevBtn) prevBtn.style.display = '';
@@ -6436,7 +6437,10 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
     _adminPreviewType = type;
     _adminPreviewRestoreModalId = null;
     var imgEl = document.getElementById('adminImgPreviewSrc');
-    if (imgEl) SqhImageCache.swap(imgEl, imgUrl);
+    if (imgEl) {
+      imgEl.src = sqhOptimizedSrc(imgUrl);
+      SqhImageCache.swap(imgEl, imgUrl);
+    }
     _setAdminPreviewActionsVisible(true);
     adminZoomCtrl.resetZoom();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('adminImgPreviewModal')).show();
@@ -6445,7 +6449,10 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
   function openAdminReadOnlyPreview(imgUrl, sourceModalId) {
     _adminPreviewType = null;
     var imgEl = document.getElementById('adminImgPreviewSrc');
-    if (imgEl) SqhImageCache.swap(imgEl, imgUrl);
+    if (imgEl) {
+      imgEl.src = sqhOptimizedSrc(imgUrl);
+      SqhImageCache.swap(imgEl, imgUrl);
+    }
     _setAdminPreviewActionsVisible(false);
     adminZoomCtrl.resetZoom();
     var previewModalEl = document.getElementById('adminImgPreviewModal');
@@ -6494,9 +6501,8 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
       e.stopPropagation();
       var banner = document.getElementById('adminProfHeroBanner');
       if (!banner) return;
-      var bg    = banner.style.backgroundImage || '';
-      var match = bg.match(/url\(['"]?([^'"\)]+)['"]?\)/);
-      if (match) openAdminPreview('banner', match[1]);
+      var url = sqhExtractBgUrl(banner);
+      if (url) openAdminPreview('banner', url);
     });
   }
 
@@ -6597,6 +6603,7 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
               banner.style.backgroundImage    = 'url(\'' + freshUrl + '\')';
               banner.style.backgroundSize     = 'cover';
               banner.style.backgroundPosition = 'center';
+              banner.dataset.bannerUrl        = freshUrl;
             }
             var bPrevBtn = document.getElementById('adminBannerPreviewBtn');
             if (bPrevBtn) bPrevBtn.style.display = '';
@@ -6641,6 +6648,7 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
               banner.style.backgroundImage    = '';
               banner.style.backgroundSize     = '';
               banner.style.backgroundPosition = '';
+              delete banner.dataset.bannerUrl;
             }
             var bPrevBtn = document.getElementById('adminBannerPreviewBtn');
             if (bPrevBtn) bPrevBtn.style.display = 'none';

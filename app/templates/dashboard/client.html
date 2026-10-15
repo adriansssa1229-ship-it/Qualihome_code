@@ -2067,7 +2067,7 @@
       <div class="img-preview-actions">
         <label id="imgPreviewReplaceBtn" class="btn btn-sm btn-outline-lime px-3" style="cursor:pointer;">
           <i class="fas fa-pen me-1"></i>Replace
-          <input type="file" id="imgPreviewReplaceInput" accept="image/*" style="display:none;">
+          <input type="file" id="imgPreviewReplaceInput" accept=".jpg,.jpeg,.png,.webp,image/png,image/jpeg,image/webp" style="display:none;">
         </label>
         <button type="button" id="imgPreviewDeleteBtn" class="btn btn-sm btn-crimson px-3">
           <i class="fas fa-trash me-1"></i>Delete
@@ -3665,11 +3665,11 @@
       <div class="prof-hero-card sqh-card mb-4">
         {# Banner #}
         <div class="prof-hero-banner" id="profHeroBanner"
-          {% if banner_url %}style="background-image:url('{{ banner_url }}');background-size:cover;background-position:center;"{% endif %}>
+          {% if banner_url %}data-banner-url="{{ banner_url }}" style="background-image:url('{{ banner_url }}');background-size:cover;background-position:center;"{% endif %}>
           <div class="prof-banner-controls">
             <button type="button" class="prof-banner-preview-btn" id="bannerPreviewBtn" title="Preview cover" {% if not banner_url %}style="display:none;"{% endif %}><i class="fas fa-eye me-1"></i> Preview</button>
             <label class="prof-upload-overlay" title="Change cover photo">
-              <input type="file" id="bannerFileInput" accept="image/*" style="display:none;">
+              <input type="file" id="bannerFileInput" accept=".jpg,.jpeg,.png,.webp,image/png,image/jpeg,image/webp" style="display:none;">
               <i class="fas fa-camera"></i> Change Cover
             </label>
             <span class="small text-white-50" id="bannerPendingFileName"></span>

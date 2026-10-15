@@ -1232,12 +1232,14 @@ Fill in your details and receive an instant AI-powered evaluation of your mortga
     var v = grossEl.value.trim(), n = gqNum(v);
     if (!v) { if (force) setInvalid(grossEl, grossErr, 'Gross monthly income is required.'); else clearState(grossEl, grossErr); return false; }
     if (isNaN(n) || n <= 0) { setInvalid(grossEl, grossErr, 'Income must be greater than ₱0.'); return false; }
+    if (n > 10000000) { setInvalid(grossEl, grossErr, 'Gross monthly income cannot exceed ₱10,000,000.00.'); return false; }
     setValid(grossEl, grossErr); return true;
   }
   function vDebt() {
     var v = debtEl.value.trim(), n = gqNum(v);
     if (!v) { clearState(debtEl, debtErr); return true; }
     if (isNaN(n) || n < 0) { setInvalid(debtEl, debtErr, 'Debt amount cannot be negative.'); return false; }
+    if (n > 10000000) { setInvalid(debtEl, debtErr, 'Monthly debt cannot exceed ₱10,000,000.00.'); return false; }
     setValid(debtEl, debtErr); return true;
   }
   function vStatus(force) {

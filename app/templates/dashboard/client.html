@@ -122,6 +122,7 @@
       return false;
     }
     if (isNaN(n) || n <= 0) { qmSetInvalid(qmGross, qmGrossErr, 'Income must be greater than &#8369;0.'); return false; }
+    if (n > 10000000) { qmSetInvalid(qmGross, qmGrossErr, 'Gross monthly income cannot exceed &#8369;10,000,000.00.'); return false; }
     qmSetValid(qmGross, qmGrossErr); return true;
   }
   function qmValDebt() {
@@ -129,6 +130,7 @@
     var n = qmNum(v);
     if (!v) { qmClearState(qmDebt, qmDebtErr); return true; }
     if (isNaN(n) || n < 0) { qmSetInvalid(qmDebt, qmDebtErr, 'Monthly debt cannot be negative.'); return false; }
+    if (n > 10000000) { qmSetInvalid(qmDebt, qmDebtErr, 'Monthly debt cannot exceed &#8369;10,000,000.00.'); return false; }
     qmSetValid(qmDebt, qmDebtErr); return true;
   }
 
@@ -415,11 +417,6 @@
       budgetOk = false;
     }
 
-    if (budgetOk && !isNaN(grossVal) && grossVal > 0 && minVal < grossVal) {
-      qmSetInvalid(qmBmin, qmBminErr, 'Minimum budget must not be lower than Gross Monthly Income.');
-      budgetOk = false;
-    }
-
     return typeOk && budgetOk;
   }
 
@@ -523,7 +520,13 @@
           errDiv.textContent = detail || data.error || 'Validation failed. Please review your inputs.';
           errDiv.classList.remove('d-none');
         }
-        if (data.fail_step) qmShowStep(data.fail_step);
+        if (data.fail_step) {
+          qmShowStep(data.fail_step);
+          setTimeout(function () {
+            var first = document.querySelector('#qm-step-' + data.fail_step + ' .lv-invalid');
+            if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 120);
+        }
         qmBtnSubmit.disabled = false;
         qmBtnSubmit.innerHTML = '<i class="fas fa-paper-plane me-2"></i> Submit &amp; View Results';
       }

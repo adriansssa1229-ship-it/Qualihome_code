@@ -130,14 +130,20 @@ class RegistrationForm(FlaskForm):
         "Gross Monthly Income (₱)",
         places=2,
         filters=[_strip_commas],
-        validators=[DataRequired(), NumberRange(min=1)],
+        validators=[
+            DataRequired(message="Gross monthly income is required."),
+            NumberRange(min=1, max=10000000, message="Gross monthly income must be between ₱1.00 and ₱10,000,000.00."),
+        ],
         render_kw={"placeholder": "e.g. 35000.00", "type": "text", "inputmode": "decimal"},
     )
     monthly_debt_loans = DecimalField(
         "Monthly Debt / Loan Payments (₱)",
         places=2,
         filters=[_strip_commas],
-        validators=[Optional(), NumberRange(min=0)],
+        validators=[
+            Optional(),
+            NumberRange(min=0, max=10000000, message="Monthly debt must not exceed ₱10,000,000.00."),
+        ],
         render_kw={"placeholder": "Car loan, personal loan, credit card, etc.", "type": "text", "inputmode": "decimal"},
     )
     # ── Step 2 — Employment ───────────────────────────────────────────────────

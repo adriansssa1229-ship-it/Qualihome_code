@@ -21,14 +21,20 @@ class Step1FinancialForm(FlaskForm):
         "Gross Monthly Income (₱)",
         places=2,
         filters=[_strip_commas],
-        validators=[DataRequired(), NumberRange(min=1)],
+        validators=[
+            DataRequired(message="Gross monthly income is required."),
+            NumberRange(min=1, max=10000000, message="Gross monthly income must be between ₱1.00 and ₱10,000,000.00."),
+        ],
         render_kw={"placeholder": "e.g. 35000.00", "type": "text", "inputmode": "decimal"},
     )
     monthly_debt_loans = DecimalField(
         "Monthly Debt / Loan Payments (₱)",
         places=2,
         filters=[_strip_commas],
-        validators=[Optional(), NumberRange(min=0)],
+        validators=[
+            Optional(),
+            NumberRange(min=0, max=10000000, message="Monthly debt must not exceed ₱10,000,000.00."),
+        ],
         render_kw={"placeholder": "Car loan, personal loan, credit card, etc.", "type": "text", "inputmode": "decimal"},
     )
     submit = SubmitField("Next: Employment Info →")
@@ -77,14 +83,20 @@ class QualifyForm(FlaskForm):
         "Gross Monthly Income (₱)",
         places=2,
         filters=[_strip_commas],
-        validators=[DataRequired(), NumberRange(min=1)],
+        validators=[
+            DataRequired(message="Gross monthly income is required."),
+            NumberRange(min=1, max=10000000, message="Gross monthly income must be between ₱1.00 and ₱10,000,000.00."),
+        ],
         render_kw={"placeholder": "e.g. 35000.00", "type": "text", "inputmode": "decimal"},
     )
     monthly_debt_loans = DecimalField(
         "Monthly Debt / Loan Payments (₱)",
         places=2,
         filters=[_strip_commas],
-        validators=[Optional(), NumberRange(min=0)],
+        validators=[
+            Optional(),
+            NumberRange(min=0, max=10000000, message="Monthly debt must not exceed ₱10,000,000.00."),
+        ],
         render_kw={"placeholder": "Car loan, personal loan, credit card, etc.", "type": "text", "inputmode": "decimal"},
     )
     sss_gsis_umid = StringField(
@@ -170,12 +182,6 @@ class QualifyForm(FlaskForm):
         max_budget = field.data or 0
         if max_budget < min_budget:
             raise ValidationError("Maximum budget must be greater than or equal to minimum budget.")
-
-    def validate_budget_min(self, field):
-        min_budget = field.data or 0
-        gross_income = self.gross_monthly_income.data or 0
-        if gross_income and min_budget < gross_income:
-            raise ValidationError("Minimum budget must not be lower than Gross Monthly Income.")
 
     def validate_sss_gsis_umid(self, field):
         value = (field.data or "").strip()

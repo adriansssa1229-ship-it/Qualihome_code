@@ -2824,6 +2824,13 @@
       agentContact = null;
     }
 
+    if (qualYearSel) {
+      var browseQualFilter = document.getElementById('browseQualifiedFilter');
+      var filterVal = browseQualFilter ? String(browseQualFilter.value || '').trim() : '';
+      var activeYear = _selectedBrowseYear(filterVal);
+      qualYearSel.value = activeYear || '20';
+    }
+
     function updatePvmQualification() {
       if (!qualWrap || !qualYearSel || !qualBadge) return;
       var clientIncome = _getClientMonthlyIncome();
@@ -2833,7 +2840,11 @@
       }
       var year = qualYearSel.value;
       var req = _toNumber((pricingData.required_monthly_income[year] || 0));
-      var status = _computeQualificationStatus(req, clientIncome, false);
+      if (req <= 0) {
+        req = _toNumber(_datasetYearValue(card.dataset, 'propReqIncome', year) || 0);
+      }
+      var fallbackQualified = String(_datasetYearValue(card.dataset, 'propQualified', year) || '0') === '1';
+      var status = _computeQualificationStatus(req, clientIncome, fallbackQualified);
       _setBadgeStatus(qualBadge, status);
       if (condBtn) condBtn.classList.toggle('d-none', status.badgeClass !== 'badge-conditional');
       qualWrap.classList.remove('d-none');

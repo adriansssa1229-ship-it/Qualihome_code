@@ -300,13 +300,13 @@ def _send_otp_email(to_email: str, otp_code: str, first_name: str = "") -> tuple
   <style>
     body {{ font-family: 'Segoe UI', Arial, sans-serif; background-color: #f7f9fc; margin: 0; padding: 20px; }}
     .container {{ max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }}
-    .header {{ background: #1a2699; padding: 24px 20px; text-align: center; }}
+    .header {{ background: #7d1a1a; padding: 24px 20px; text-align: center; }}
     .header h1 {{ color: #ffffff; margin: 0; font-size: 24px; letter-spacing: 1px; font-weight: 800; }}
-    .header p {{ color: #aadd2a; margin: 5px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; }}
+    .header p {{ color: #fbd38d; margin: 5px 0 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; }}
     .content {{ padding: 30px 24px; color: #2d3748; line-height: 1.6; }}
     .greeting {{ font-size: 18px; font-weight: 700; color: #1a202c; margin-bottom: 12px; }}
-    .otp-box {{ background: #f0f4ff; border: 2px dashed #1a2699; border-radius: 10px; padding: 20px; text-align: center; margin: 22px 0; }}
-    .otp-code {{ font-size: 36px; font-weight: 900; letter-spacing: 12px; color: #1a2699; font-family: monospace; }}
+    .otp-box {{ background: #fff5f5; border: 2px dashed #7d1a1a; border-radius: 10px; padding: 20px; text-align: center; margin: 22px 0; }}
+    .otp-code {{ font-size: 36px; font-weight: 900; letter-spacing: 12px; color: #7d1a1a; font-family: monospace; }}
     .otp-sub {{ font-size: 12px; color: #718096; margin-top: 8px; font-weight: 600; }}
     .footer {{ background: #edf2f7; padding: 16px 20px; text-align: center; font-size: 12px; color: #718096; border-top: 1px solid #e2e8f0; }}
   </style>

@@ -4420,7 +4420,7 @@ function _openAdminEditPropertyModal(d) {
     var tile = document.createElement('div');
     tile.className = 'sub-img-tile';
     tile.innerHTML =
-      '<img src="/uploads/' + _escHtml(fname) + '" class="sub-img-tile-img" alt="">'
+      '<img src="' + sqhImgSrc(fname) + '" class="sub-img-tile-img" alt="">'
       + '<button type="button" class="sub-img-tile-del" data-fname="' + _escHtml(fname) + '"><i class="fas fa-times"></i></button>'
       + '<input type="hidden" name="existing_img" value="' + _escHtml(fname) + '">';
     imgWrap.appendChild(tile);
@@ -4786,6 +4786,7 @@ _bind('ep_images', 'change', function() {
     wrap.appendChild(tile);
   }
   document.getElementById('ep_images_filenames').value = _pendingNewFiles.filter(Boolean).map(function(f) { return f.name; }).join(', ');
+  this.value = '';
 });
 
 _bind('editPropBtn', 'click', function() {
@@ -4868,7 +4869,7 @@ _bind('editPropBtn', 'click', function() {
     original.forEach(function(fname) {
       if (kept.indexOf(fname) === -1) fd.append('remove_images', fname);
     });
-    _pendingNewFiles.filter(Boolean).forEach(function(f) { fd.append('images', f); });
+    _pendingNewFiles.filter(Boolean).forEach(function(f) { fd.append('images', f, f.name); });
     fd.append('csrf_token', csrfToken());
 
     fetch('/agent/property/' + encodeURIComponent(_editPropId) + '/edit', { method: 'POST', body: fd })
@@ -4889,6 +4890,8 @@ _bind('editPropBtn', 'click', function() {
           if (errEl) {
             errEl.textContent = apiErr;
             errEl.classList.remove('d-none');
+            try { errEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+            showToast(apiErr, 'danger');
           }
           return;
         }
@@ -7752,7 +7755,7 @@ var _pendingAcpFiles = [];
       + (parseInt(prop.purchases_count || 0, 10) > 0 ? '      <span class="prop-indicator-chip chip-green" title="' + parseInt(prop.purchases_count || 0, 10) + ' Purchase Request' + (parseInt(prop.purchases_count || 0, 10) > 1 ? 's' : '') + '"><i class="fas fa-file-signature me-1"></i>' + parseInt(prop.purchases_count || 0, 10) + ' Purchase Request' + (parseInt(prop.purchases_count || 0, 10) > 1 ? 's' : '') + '</span>' : '')
       + '    </div>'
       + (firstImg
-          ? '    <img src="/uploads/' + _escapeHtml(firstImg) + '" alt="' + _escapeHtml(name) + '" class="prop-card-img">'
+          ? '    <img src="' + sqhImgSrc(firstImg) + '" alt="' + _escapeHtml(name) + '" class="prop-card-img">'
           : '    <div class="prop-card-img-placeholder"><i class="fas fa-home"></i></div>')
       + (imgCount > 1 ? '    <span class="prop-card-img-count"><i class="fas fa-images me-1"></i>' + imgCount + '</span>' : '')
       + '    <div class="prop-card-actions">'
@@ -7830,6 +7833,7 @@ var _pendingAcpFiles = [];
       wrap.appendChild(tile);
     }
     syncAcpFileNames();
+    this.value = '';
   });
 
   modalEl.addEventListener('hidden.bs.modal', function () {
@@ -7926,7 +7930,7 @@ var _pendingAcpFiles = [];
       fd.append('unit_id', val('acp_unit_id'));
       fd.append('status', val('acp_status') || 'available');
       fd.append('description', val('acp_description'));
-      _pendingAcpFiles.filter(Boolean).forEach(function (f) { fd.append('images', f); });
+      _pendingAcpFiles.filter(Boolean).forEach(function (f) { fd.append('images', f, f.name); });
       fd.append('csrf_token', csrfToken());
 
       fetch('/admin/property/create', {
@@ -7951,7 +7955,7 @@ var _pendingAcpFiles = [];
       })
       .then(function (res) {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-plus me-1"></i> Add Property';
+        btn.innerHTML = '<i class="fas fa-plus me-1"></i> Add Model';
 
         if (!res.ok || !res.data || !res.data.success) {
           if (res.status === 413) {
@@ -7960,14 +7964,18 @@ var _pendingAcpFiles = [];
               errEl.textContent = sizeMsg;
               errEl.dataset.source = 'submit';
               errEl.classList.remove('d-none');
+              try { errEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
             }
             showToast(sizeMsg, 'danger');
             return;
           }
           if (errEl) {
-            errEl.textContent = (res.data && res.data.error) || 'Failed to create property.';
+            var errMsg = (res.data && res.data.error) || 'Failed to create property.';
+            errEl.textContent = errMsg;
             errEl.dataset.source = 'submit';
             errEl.classList.remove('d-none');
+            try { errEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+            showToast(errMsg, 'danger');
           }
           return;
         }

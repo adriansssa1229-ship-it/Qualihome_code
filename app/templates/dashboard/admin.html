@@ -1041,7 +1041,7 @@
               <span class="input-group-text sqh-ig-text"><i class="fas fa-images"></i></span>
               <input type="text" id="ep_images_filenames" class="form-control sqh-form-control" placeholder="No files selected" readonly>
               <button type="button" id="ep_images_browse_btn" class="btn btn-outline-crimson" onclick="document.getElementById('ep_images').click()"><i class="fas fa-folder-open me-1"></i>Browse</button>
-              <input type="file" id="ep_images" class="d-none" accept="image/*" multiple>
+              <input type="file" id="ep_images" class="d-none" accept=".jpg,.jpeg,.png,.webp,image/png,image/jpeg,image/webp" multiple>
             </div>
           </div>
 
@@ -2247,14 +2247,14 @@
               </div>
             </div>
             <div class="col-12">
-              <label class="sqh-form-label"><i class="fas fa-images me-2"></i>Current Images</label>
+              <label class="sqh-form-label"><i class="fas fa-images me-2"></i>Selected Images Preview</label>
               <div id="acp_images_wrap" class="sub-img-tiles-wrap mb-2" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
               <label class="sqh-form-label">Add New Images</label>
               <div class="input-group sqh-input-group">
                 <span class="input-group-text sqh-ig-text"><i class="fas fa-images"></i></span>
                 <input type="text" id="acp_images_filenames" class="form-control sqh-form-control" placeholder="No files selected" readonly style="cursor:pointer;" onclick="document.getElementById('acp_images').click()">
                 <button type="button" class="btn btn-outline-crimson" onclick="document.getElementById('acp_images').click()"><i class="fas fa-folder-open me-1"></i>Browse</button>
-                <input type="file" id="acp_images" class="d-none" accept="image/*" multiple>
+                <input type="file" id="acp_images" class="d-none" accept=".jpg,.jpeg,.png,.webp,image/png,image/jpeg,image/webp" multiple>
               </div>
               <div class="form-text text-muted small mt-1">Optional. You can select multiple images. Accepted: JPG, PNG, WEBP (max 10 MB each).</div>
             </div>

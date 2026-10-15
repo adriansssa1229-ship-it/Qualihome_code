@@ -237,22 +237,36 @@ def _store_image_file(file_obj) -> str:
     The returned reference is stored in the DB as-is.
     """
     if _cloudinary_enabled():
-        import cloudinary.uploader
-        result = cloudinary.uploader.upload(
-            file_obj,
-            folder=current_app.config.get("CLOUDINARY_FOLDER", "qualihome"),
-        )
-        return result["secure_url"]
+        try:
+            import cloudinary.uploader
+            if hasattr(file_obj, "stream"):
+                file_obj.stream.seek(0)
+            result = cloudinary.uploader.upload(
+                file_obj,
+                folder=current_app.config.get("CLOUDINARY_FOLDER", "qualihome"),
+            )
+            if result and result.get("secure_url"):
+                return result["secure_url"]
+        except Exception as exc:
+            current_app.logger.warning("Cloudinary upload failed for %s: %s; falling back to local file", getattr(file_obj, "filename", ""), exc)
+            if hasattr(file_obj, "stream"):
+                try:
+                    file_obj.stream.seek(0)
+                except Exception:
+                    pass
     return _save_local_image_file(file_obj)
 
 
 def _save_local_image_file(file_obj):
     upload_dir = current_app.config["UPLOAD_FOLDER"]
     os.makedirs(upload_dir, exist_ok=True)
-    original = secure_filename(file_obj.filename or "")
-    ext = os.path.splitext(original)[1].lower()
+    raw_name = getattr(file_obj, "filename", "") or ""
+    clean_name = secure_filename(raw_name)
+    ext = os.path.splitext(clean_name)[1].lower()
     if not ext:
-        mime = (file_obj.mimetype or "").lower()
+        ext = os.path.splitext(raw_name)[1].lower()
+    if not ext:
+        mime = (getattr(file_obj, "mimetype", "") or "").lower()
         if "png" in mime:
             ext = ".png"
         elif "webp" in mime:
@@ -262,6 +276,11 @@ def _save_local_image_file(file_obj):
         else:
             ext = ".jpg"
     filename = f"sub_{uuid.uuid4().hex}{ext}"
+    if hasattr(file_obj, "stream"):
+        try:
+            file_obj.stream.seek(0)
+        except Exception:
+            pass
     file_obj.save(os.path.join(upload_dir, filename))
     return filename
 
@@ -3145,12 +3164,24 @@ def _save_property_images(files):
     """Persist uploaded property images; return list of stored references."""
     saved = []
     for f in files:
-        if f and f.filename:
-            ext = os.path.splitext(secure_filename(f.filename))[1].lower()
+        if f and getattr(f, "filename", None):
+            raw_name = f.filename.strip()
+            if not raw_name:
+                continue
+            clean = secure_filename(raw_name)
+            ext = os.path.splitext(clean)[1].lower()
+            if not ext:
+                ext = os.path.splitext(raw_name)[1].lower()
             if ext not in ALLOWED_IMG_EXTS:
                 continue
-            f.stream.seek(0)
-            saved.append(_store_image_file(f))
+            try:
+                if hasattr(f, "stream"):
+                    f.stream.seek(0)
+                stored = _store_image_file(f)
+                if stored:
+                    saved.append(stored)
+            except Exception as exc:
+                current_app.logger.warning("Failed to store property image %s: %s", raw_name, exc)
     return saved
 
 

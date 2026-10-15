@@ -574,16 +574,9 @@ def save_profile():
     if "address_line" in data:
         profile.address_line = data.get("address_line", "").strip() or None
 
-    try:
-        profile.dependents   = int(data.get("dependents", 0) or 0)
-    except (ValueError, TypeError):
-        profile.dependents   = 0
-
-    try:
-        profile.age          = int(data.get("age") or 0) or None
-    except (ValueError, TypeError):
-        profile.age          = None
-
+    # Note: Assessment fields (dependents, age, employment_type, tenure_months,
+    # gross_income, monthly_loans, preferred_type, budget_min/max) can only be updated
+    # through the Qualification Assessment modal (/qualify) to ensure ML/DTI integrity.
     bd = data.get("birth_date", "").strip()
     if bd:
         try:
@@ -603,8 +596,6 @@ def save_profile():
     profile.birth_barangay_code = data.get("birth_barangay_code", "").strip() or None
     profile.birth_barangay_name = data.get("birth_barangay_name", "").strip() or None
 
-    if "employment_type" in data:
-        profile.employment_type = data.get("employment_type", "").strip() or None
     if "employer_name" in data:
         profile.employer_name = data.get("employer_name", "").strip() or None
     if "employer_phone" in data:
@@ -620,27 +611,6 @@ def save_profile():
     profile.employer_citymun_name = data.get("employer_citymun_name", "").strip() or None
     profile.employer_barangay_code = data.get("employer_barangay_code", "").strip() or None
     profile.employer_barangay_name = data.get("employer_barangay_name", "").strip() or None
-
-    def _float(val, default=None):
-        try:
-            return float(val) if val not in (None, "") else default
-        except (ValueError, TypeError):
-            return default
-
-    def _int(val, default=None):
-        try:
-            return int(val) if val not in (None, "") else default
-        except (ValueError, TypeError):
-            return default
-
-    if "tenure_months" in data:
-        profile.tenure_months = _int(data.get("tenure_months"))
-    if "gross_income" in data:
-        profile.gross_income = _float(data.get("gross_income"))
-    if "monthly_loans" in data:
-        profile.monthly_loans = _float(data.get("monthly_loans"), 0)
-    if "other_deductions" in data:
-        profile.other_deductions = _float(data.get("other_deductions"), 0)
 
     profile.home_region_code = data.get("home_region_code", "").strip() or None
     profile.home_region_name = data.get("home_region_name", "").strip() or None

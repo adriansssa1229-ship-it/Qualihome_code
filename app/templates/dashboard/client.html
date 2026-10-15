@@ -3832,12 +3832,12 @@
                 </div>
               </div>
               <div class="col-md-4">
-                <label class="sqh-form-label">Dependents</label>
+                <label class="sqh-form-label">Number of Dependents</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-child"></i></span>
-                  <input type="number" class="form-control sqh-form-control" id="prof_dependents"
-                         value="{{ profile.dependents if profile else 0 }}" min="0" max="20">
+                  <div class="form-control sqh-form-control" style="background:#f8f9fb;">{% if profile and profile.dependents is not none %}{{ profile.dependents }}{% else %}0{% endif %}</div>
                 </div>
+                <div class="form-text small text-muted">Display only. Update in assessment.</div>
               </div>
               <div class="col-md-4">
                 <label class="sqh-form-label">Birth Date</label>
@@ -3851,9 +3851,9 @@
                 <label class="sqh-form-label">Age</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-calendar-alt"></i></span>
-                  <input type="number" class="form-control sqh-form-control" id="prof_age"
-                         value="{{ profile.age if profile and profile.age else '' }}" min="18" max="80" placeholder="Years">
+                  <div class="form-control sqh-form-control" style="background:#f8f9fb;">{% if profile and profile.age %}{{ profile.age }} yrs old{% else %}—{% endif %}</div>
                 </div>
+                <div class="form-text small text-muted">Display only. Update in assessment.</div>
               </div>
             </div>
           </div>
@@ -3935,20 +3935,21 @@
             </div>
             <div class="row g-3">
               <div class="col-md-4">
-                <label class="sqh-form-label">Employment Type</label>
+                <label class="sqh-form-label">Employment Status</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-id-badge"></i></span>
-                  <select class="form-select sqh-form-control" id="prof_employment_type">
-                    <option value="">Select</option>
-                    <option value="employed" {% if profile and profile.employment_type == 'employed' %}selected{% endif %}>Employed</option>
-                    <option value="ofw-landbased" {% if profile and profile.employment_type == 'ofw-landbased' %}selected{% endif %}>OFW - LandBased</option>
-                    <option value="ofw-seafarer" {% if profile and profile.employment_type == 'ofw-seafarer' %}selected{% endif %}>OFW - Seafarer</option>
-                    <option value="licensed-professional" {% if profile and profile.employment_type == 'licensed-professional' %}selected{% endif %}>Licensed Professional</option>
-                    <option value="with-financial-support" {% if profile and profile.employment_type == 'with-financial-support' %}selected{% endif %}>With Financial Support</option>
-                    <option value="with-attorney-in-fact" {% if profile and profile.employment_type == 'with-attorney-in-fact' %}selected{% endif %}>With Attorney In-Fact</option>
-                    <option value="with-co-borrower" {% if profile and profile.employment_type == 'with-co-borrower' %}selected{% endif %}>With Co-Borrower</option>
-                  </select>
+                  {% set emp_labels = {
+                    'employed': 'Employed',
+                    'ofw-landbased': 'OFW - LandBased',
+                    'ofw-seafarer': 'OFW - Seafarer',
+                    'licensed-professional': 'Licensed Professional',
+                    'with-financial-support': 'With Financial Support',
+                    'with-attorney-in-fact': 'With Attorney In-Fact',
+                    'with-co-borrower': 'With Co-Borrower'
+                  } %}
+                  <div class="form-control sqh-form-control" style="background:#f8f9fb;">{{ emp_labels.get(profile.employment_type, profile.employment_type|replace('-', ' ')|title) if (profile and profile.employment_type) else '—' }}</div>
                 </div>
+                <div class="form-text small text-muted">Display only. Update in assessment.</div>
               </div>
               <div class="col-md-4">
                 <label class="sqh-form-label">Employer/Business Name</label>
@@ -3978,9 +3979,9 @@
                 <label class="sqh-form-label">Tenure (months)</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-hourglass-half"></i></span>
-                  <input type="number" class="form-control sqh-form-control" id="prof_tenure_months"
-                         value="{{ profile.tenure_months if profile and profile.tenure_months is not none else '' }}" min="0" max="600" placeholder="Months">
+                  <div class="form-control sqh-form-control" style="background:#f8f9fb;">{% if profile and profile.tenure_months is not none %}{{ profile.tenure_months }} month{{ 's' if profile.tenure_months != 1 else '' }}{% else %}—{% endif %}</div>
                 </div>
+                <div class="form-text small text-muted">Display only. Update in assessment.</div>
               </div>
               <div class="col-md-4">
                 <label class="sqh-form-label">Employer Region</label>
@@ -4296,7 +4297,7 @@
                 <label class="sqh-form-label">Model Type</label>
                 <div class="input-group sqh-input-group">
                   <span class="input-group-text sqh-ig-text"><i class="fas fa-home"></i></span>
-                  <div class="form-control sqh-form-control" style="background:#f8f9fb;">{{ 'House And Lot' if profile else '—' }}</div>
+                  <div class="form-control sqh-form-control" style="background:#f8f9fb;">{{ profile.preferred_type if (profile and profile.preferred_type) else ('Any Model (Optional)' if profile else '—') }}</div>
                 </div>
               </div>
               <div class="col-md-4">

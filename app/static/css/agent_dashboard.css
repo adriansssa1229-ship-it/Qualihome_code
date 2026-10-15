@@ -1051,31 +1051,17 @@
     align-items: end;
   }
 
-  /* Search stays full width top row */
-  #page-listings .dash-filter-bar .dash-fb-group:nth-child(1) {
+  /* Filter groups full width on mobile */
+  #page-listings .dash-filter-bar .dash-fb-group {
     grid-column: 1 / -1;
     min-width: 100%;
-  }
-
-  /* Approval is alone on its own row */
-  #page-listings .dash-filter-bar .dash-fb-group:nth-child(2) {
-    grid-column: 1 / -1;
-    min-width: 100%;
-    flex: initial;
-  }
-
-  /* Project shares row with Submit Property button */
-  #page-listings .dash-filter-bar .dash-fb-group:nth-child(3) {
-    grid-column: 1;
-    min-width: 0;
-    width: 100%;
     flex: initial;
   }
 
   #page-listings .dash-filter-bar > .d-flex {
-    grid-column: 2;
-    width: auto;
-    justify-content: flex-end;
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: flex-start;
     align-self: end;
   }
 

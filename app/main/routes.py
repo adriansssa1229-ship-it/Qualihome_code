@@ -1133,7 +1133,7 @@ def agent_dashboard():
     my_props = (my_props_q
                 .options(
                     selectinload(Property.sale_record).selectinload(PropertySale.client),
-                    selectinload(Property.subdivision),
+                    selectinload(Property.subdivision).selectinload(Subdivision.project),
                 )
                 .order_by(Property.created_at.desc())
                 .all())
@@ -1162,6 +1162,14 @@ def agent_dashboard():
     }
 
     all_subdivisions = Subdivision.query.order_by(Subdivision.name).all()
+
+    def _norm_name(value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", (value or "").strip().lower())
+
+    sub_name_set = {_norm_name(s.name) for s in all_subdivisions if (s.name or "").strip()}
+    all_projects_raw = Project.query.order_by(Project.name).all()
+    all_projects = [p for p in all_projects_raw if _norm_name(p.name) not in sub_name_set]
+
     agent_info       = current_user.profile
 
     avatar_url = (url_for("main.serve_agent_avatar", user_id=agent_info.user_id)
@@ -1294,6 +1302,7 @@ def agent_dashboard():
         unread_notif_count=unread_notif_count,
         assignment_feed_items=assignment_feed_items,
         sales_snapshot=sales_snapshot,
+        all_projects=all_projects,
         all_subdivisions=all_subdivisions,
         agent_property_pricing_map=agent_property_pricing_map,
         agent_info=agent_info,

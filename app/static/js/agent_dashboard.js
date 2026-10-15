@@ -2439,32 +2439,77 @@ function _clearTopbarAvatar() {
 
   var listingsSearch       = document.getElementById('listingsSearch');
   var listingsFilter       = document.getElementById('listingsFilterApproval');
-  var listingsFilterSubdiv = document.getElementById('listingsFilterSubdivision');
+  var listingsFilterProj   = document.getElementById('listingsFilterProject') || document.getElementById('listingsFilterSubdivision');
+  var listingsFilterLoc    = document.getElementById('listingsFilterLocation');
+
+  function syncListingLocationOptions(selectedProjectId) {
+    if (!listingsFilterLoc) return;
+    var optgroups = listingsFilterLoc.querySelectorAll('optgroup');
+    if (optgroups.length > 0) {
+      optgroups.forEach(function (og) {
+        var ogPid = og.getAttribute('data-project-id') || '';
+        if (!selectedProjectId) {
+          og.style.display = '';
+          Array.prototype.forEach.call(og.querySelectorAll('option'), function(o) { o.hidden = false; });
+        } else {
+          var match = (selectedProjectId === '__none__') ? (!ogPid) : (String(ogPid) === String(selectedProjectId));
+          og.style.display = match ? '' : 'none';
+          Array.prototype.forEach.call(og.querySelectorAll('option'), function(o) { o.hidden = !match; });
+        }
+      });
+    }
+    if (listingsFilterLoc.selectedIndex > 0) {
+      var activeOpt = listingsFilterLoc.options[listingsFilterLoc.selectedIndex];
+      if (activeOpt && (activeOpt.hidden || (activeOpt.parentElement && activeOpt.parentElement.tagName === 'OPTGROUP' && activeOpt.parentElement.style.display === 'none'))) {
+        listingsFilterLoc.value = '';
+      }
+    }
+  }
+
   function filterListings() {
-    var q      = listingsSearch       ? listingsSearch.value.trim().toLowerCase() : '';
-    var s      = listingsFilter       ? listingsFilter.value                       : '';
-    var subdiv = listingsFilterSubdiv ? listingsFilterSubdiv.value                 : '';
-    var grid = document.getElementById('listingsCardsGrid');
+    var q      = listingsSearch     ? listingsSearch.value.trim().toLowerCase()     : '';
+    var s      = listingsFilter     ? listingsFilter.value.trim().toLowerCase()     : '';
+    var pid    = listingsFilterProj ? String(listingsFilterProj.value || '').trim() : '';
+    var loc    = listingsFilterLoc  ? listingsFilterLoc.value.trim().toLowerCase()  : '';
+    var grid   = document.getElementById('listingsCardsGrid');
     if (!grid) return;
     var visibleCount = 0;
     grid.querySelectorAll('.listing-card-col').forEach(function (col) {
-      var name     = (col.getAttribute('data-prop-name')   || '').toLowerCase();
-      var loc      = (col.getAttribute('data-prop-loc')    || '').toLowerCase();
-      var listingStatus = (col.getAttribute('data-listing-status') || '').toLowerCase();
-      var sub      = (col.getAttribute('data-prop-subdiv') || '');
-      var textMatch   = !q      || name.includes(q) || loc.includes(q);
-      var statusMatch = !s      || listingStatus === s;
-      var subdivMatch = !subdiv || (subdiv === '__none__' ? sub === '' : sub === subdiv);
-      var show = textMatch && statusMatch && subdivMatch;
+      var card          = col.querySelector('.listing-card') || col;
+      var name          = (col.getAttribute('data-prop-name')   || card.dataset.name         || '').toLowerCase();
+      var fullLoc       = (col.getAttribute('data-prop-loc')    || card.dataset.location     || '').toLowerCase();
+      var listingStatus = (col.getAttribute('data-listing-status')                           || '').toLowerCase();
+      var sub           = (col.getAttribute('data-prop-subdiv') || '').toLowerCase();
+      var colPid        = String(col.getAttribute('data-project-id')   || card.dataset.projectId   || '').trim();
+      var colPname      = (col.getAttribute('data-project-name') || card.dataset.projectName || '').toLowerCase();
+      var rowCp         = (col.getAttribute('data-city-province')|| card.dataset.cityProvince|| '').toLowerCase();
+
+      var textMatch   = !q   || name.includes(q) || fullLoc.includes(q) || sub.includes(q) || colPname.includes(q) || rowCp.includes(q);
+      var statusMatch = !s   || listingStatus === s;
+      var projMatch   = !pid || (pid === '__none__' ? (!colPid) : (colPid === pid || colPname === pid.toLowerCase() || sub === pid.toLowerCase()));
+      var locMatch    = !loc || rowCp === loc || fullLoc.includes(loc) || rowCp.includes(loc);
+
+      var show = textMatch && statusMatch && projMatch && locMatch;
       col.style.display = show ? '' : 'none';
       if (show) visibleCount++;
     });
     var emptyEl = document.getElementById('listingsFilterEmpty');
     if (emptyEl) emptyEl.classList.toggle('d-none', visibleCount > 0);
   }
-  if (listingsSearch)       listingsSearch.addEventListener('input', filterListings);
-  if (listingsFilter)       listingsFilter.addEventListener('change', filterListings);
-  if (listingsFilterSubdiv) listingsFilterSubdiv.addEventListener('change', filterListings);
+
+  if (listingsSearch) listingsSearch.addEventListener('input', filterListings);
+  if (listingsFilter) listingsFilter.addEventListener('change', filterListings);
+  if (listingsFilterProj) {
+    listingsFilterProj.addEventListener('change', function () {
+      syncListingLocationOptions(listingsFilterProj.value);
+      filterListings();
+    });
+  }
+  if (listingsFilterLoc) listingsFilterLoc.addEventListener('change', filterListings);
+
+  if (listingsFilterProj && listingsFilterLoc) {
+    syncListingLocationOptions(listingsFilterProj.value);
+  }
 
   // Card click → open edit modal (skip delete-btn clicks)
   document.addEventListener('click', function (e) {

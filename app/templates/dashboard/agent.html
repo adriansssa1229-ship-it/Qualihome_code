@@ -1351,13 +1351,42 @@
             </select>
           </div>
           <div class="dash-fb-group">
-            <label class="dash-fb-label"><i class="fas fa-city me-1"></i>Project</label>
-            <select id="listingsFilterSubdivision" class="form-select dash-fb-select">
+            <label class="dash-fb-label"><i class="fas fa-building me-1"></i>Project</label>
+            <select id="listingsFilterProject" class="form-select dash-fb-select">
               <option value="">All Projects</option>
-              {% for sub in all_subdivisions %}
-              <option value="{{ sub.name }}">{{ sub.name }}</option>
+              {% for pr in all_projects %}
+              <option value="{{ pr.id }}">{{ pr.name }}</option>
               {% endfor %}
-              <option value="__none__">— No Project</option>
+              {% set other_subs = all_subdivisions | rejectattr('project_id') | list %}
+              {% if other_subs %}
+              <option value="__none__">— Other / No Project</option>
+              {% endif %}
+            </select>
+          </div>
+          <div class="dash-fb-group">
+            <label class="dash-fb-label"><i class="fas fa-map-marker-alt me-1"></i>Location</label>
+            <select id="listingsFilterLocation" class="form-select dash-fb-select">
+              <option value="">All Locations</option>
+              {% for pr in all_projects %}
+                {% set pr_subs = all_subdivisions | selectattr('project_id', 'equalto', pr.id) | list %}
+                {% set pr_locs = pr_subs | map(attribute='city_province') | select('string') | list | unique | sort %}
+                {% if pr_locs %}
+                <optgroup label="{{ pr.name }}" data-project-id="{{ pr.id }}">
+                  {% for loc in pr_locs %}
+                  <option value="{{ loc }}" data-project-id="{{ pr.id }}">{{ loc }}</option>
+                  {% endfor %}
+                </optgroup>
+                {% endif %}
+              {% endfor %}
+              {% set other_subs = all_subdivisions | rejectattr('project_id') | list %}
+              {% set other_locs = other_subs | map(attribute='city_province') | select('string') | list | unique | sort %}
+              {% if other_locs %}
+              <optgroup label="Other Locations" data-project-id="">
+                {% for loc in other_locs %}
+                <option value="{{ loc }}" data-project-id="">{{ loc }}</option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
             </select>
           </div>
            {% if current_user.role == 'admin' %}
@@ -1383,7 +1412,10 @@
             data-listing-status="{{ 'sold' if p.status == 'sold' else 'available' }}"
                data-prop-name="{{ p.name }}"
                data-prop-loc="{{ full_loc }}"
-               data-prop-subdiv="{{ p.subdivision.name if p.subdivision else '' }}">
+               data-prop-subdiv="{{ p.subdivision.name if p.subdivision else '' }}"
+               data-project-id="{{ p.subdivision.project_id if p.subdivision and p.subdivision.project_id else '' }}"
+               data-project-name="{{ p.subdivision.project.name if p.subdivision and p.subdivision.project else '' }}"
+               data-city-province="{{ p.city_province or (p.subdivision.city_province if p.subdivision else '') }}">
               <div class="prop-card listing-card" data-prop-id="{{ p.id }}"
                 data-detail-requests-pending="{{ pricing_request_pending_count_by_property.get(p.id, 0) }}"
                 data-detail-requests-total="{{ pricing_request_total_count_by_property.get(p.id, 0) }}"
@@ -1401,6 +1433,9 @@
                 data-citymun-name="{{ p.citymun_name or '' }}"
                 data-barangay-code="{{ p.barangay_code or '' }}"
                 data-barangay-name="{{ p.barangay_name or '' }}"
+                data-project-id="{{ p.subdivision.project_id if p.subdivision and p.subdivision.project_id else '' }}"
+                data-project-name="{{ p.subdivision.project.name if p.subdivision and p.subdivision.project else '' }}"
+                data-city-province="{{ p.city_province or (p.subdivision.city_province if p.subdivision else '') }}"
                  data-prop-type="{{ p.prop_type or '' }}"
                  data-prop-unit-type="{{ p.unit_type or '' }}"
                  data-unit-id="{{ p.unit_id or '' }}"

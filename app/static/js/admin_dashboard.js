@@ -3507,12 +3507,35 @@ function _openPurchaseListForProperty(propId, propName) {
   if (!modalEl) return;
   var nameEl = document.getElementById('purchaseListPropertyName');
   var summaryEl = document.getElementById('purchaseListSummary');
-  var bodyEl = document.getElementById('purchaseListTableBody');
-  var emptyEl = document.getElementById('purchaseListEmpty');
+  var submittedBadgeEl = document.getElementById('purchaseSubmittedCountBadge');
+  var visitedBadgeEl = document.getElementById('purchaseVisitedCountBadge');
+  var submittedBodyEl = document.getElementById('purchaseSubmittedTableBody');
+  var submittedEmptyEl = document.getElementById('purchaseSubmittedEmpty');
+  var visitedBodyEl = document.getElementById('purchaseVisitedTableBody');
+  var visitedEmptyEl = document.getElementById('purchaseVisitedEmpty');
+
   if (nameEl) nameEl.textContent = _purchaseListState.propertyName;
   if (summaryEl) summaryEl.textContent = 'Loading entries...';
-  if (bodyEl) bodyEl.innerHTML = '';
-  if (emptyEl) emptyEl.classList.add('d-none');
+  if (submittedBadgeEl) submittedBadgeEl.textContent = '…';
+  if (visitedBadgeEl) visitedBadgeEl.textContent = '…';
+  if (submittedBodyEl) submittedBodyEl.innerHTML = '';
+  if (visitedBodyEl) visitedBodyEl.innerHTML = '';
+  if (submittedEmptyEl) submittedEmptyEl.classList.add('d-none');
+  if (visitedEmptyEl) visitedEmptyEl.classList.add('d-none');
+
+  // Reset to first tab (Submitted Buyer Forms) by default
+  var firstTabBtn = document.getElementById('tab-purchase-submitted');
+  var firstPane = document.getElementById('pane-purchase-submitted');
+  var secondTabBtn = document.getElementById('tab-purchase-visited');
+  var secondPane = document.getElementById('pane-purchase-visited');
+  if (firstTabBtn && firstPane && secondTabBtn && secondPane) {
+    firstTabBtn.classList.add('active');
+    firstTabBtn.setAttribute('aria-selected', 'true');
+    firstPane.classList.add('show', 'active');
+    secondTabBtn.classList.remove('active');
+    secondTabBtn.setAttribute('aria-selected', 'false');
+    secondPane.classList.remove('show', 'active');
+  }
 
   bootstrap.Modal.getOrCreateInstance(modalEl).show();
 
@@ -3524,69 +3547,163 @@ function _openPurchaseListForProperty(propId, propName) {
       if (!data || !data.ok) throw new Error((data && data.error) || 'Unable to load purchase list.');
       var rows = Array.isArray(data.rows) ? data.rows : [];
       _purchaseListState.rows = rows;
+
+      // Tab 1: Submitted Buyer Forms (only trips where purchase_form_submitted == True)
+      var submittedRows = rows.filter(function (r) {
+        return !!r.purchase_form_submitted;
+      });
+
+      // Tab 2: Visited Leads (Pending Submission) (trips where status == 'visited' AND purchase_form_submitted == False)
+      var visitedLeadsRows = rows.filter(function (r) {
+        return String(r.status || '').toLowerCase() === 'visited' && !r.purchase_form_submitted;
+      });
+
       var _pendingPurchasesCnt = rows.filter(function (r) {
         return r.purchase_form_submitted && !r.is_sold && r.purchase_status !== 'rejected';
       }).length;
       _syncPropertyPurchaseBadge(_purchaseListState.propertyId, _pendingPurchasesCnt, rows.length);
-      if (nameEl) nameEl.textContent = data.property_name || _purchaseListState.propertyName;
-      if (summaryEl) summaryEl.textContent = rows.length + ' candidate' + (rows.length === 1 ? '' : 's');
 
-      if (!bodyEl) return;
-      bodyEl.innerHTML = '';
-      if (!rows.length) {
-        if (emptyEl) emptyEl.classList.remove('d-none');
-        return;
+      if (nameEl) nameEl.textContent = data.property_name || _purchaseListState.propertyName;
+      if (summaryEl) {
+        summaryEl.textContent = submittedRows.length + ' submitted form' + (submittedRows.length === 1 ? '' : 's')
+          + ' • ' + visitedLeadsRows.length + ' visited lead' + (visitedLeadsRows.length === 1 ? '' : 's');
+      }
+      if (submittedBadgeEl) submittedBadgeEl.textContent = String(submittedRows.length);
+      if (visitedBadgeEl) visitedBadgeEl.textContent = String(visitedLeadsRows.length);
+
+      // ── Render Tab 1: Submitted Buyer Forms ──
+      if (submittedBodyEl) {
+        submittedBodyEl.innerHTML = '';
+        if (!submittedRows.length) {
+          if (submittedEmptyEl) submittedEmptyEl.classList.remove('d-none');
+        } else {
+          if (submittedEmptyEl) submittedEmptyEl.classList.add('d-none');
+          submittedRows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            var clientId = row.client_id;
+            var clientDisplay = clientId
+              ? '<a href="javascript:void(0)" class="fw-semibold text-decoration-none purchase-list-client-btn text-dark" data-client-id="' + clientId + '" title="View Full Client Account Details">'
+                + '<i class="fas fa-user-circle text-primary me-1"></i>' + _escHtml(row.client_name || 'Client')
+                + '</a>'
+              : '<span class="fw-semibold">' + _escHtml(row.client_name || 'Client') + '</span>';
+
+            var submittedDateText = _escHtml(row.submitted_date || row.preferred_date || '—');
+
+            var unitPriceText = '';
+            if (row.selected_unit && row.selected_unit !== '—' && row.selected_price && row.selected_price !== '—') {
+              unitPriceText = '<span class="badge bg-light text-dark border me-1">Unit ' + _escHtml(row.selected_unit) + '</span><span class="fw-semibold text-dark">' + _escHtml(row.selected_price) + '</span>';
+            } else if (row.selected_unit_price && row.selected_unit_price !== '—') {
+              unitPriceText = '<span class="fw-semibold text-dark">' + _escHtml(row.selected_unit_price) + '</span>';
+            } else if (row.selected_price && row.selected_price !== '—') {
+              unitPriceText = '<span class="fw-semibold text-dark">' + _escHtml(row.selected_price) + '</span>';
+            } else {
+              unitPriceText = '<span class="text-muted">—</span>';
+            }
+
+            var isSold = !!row.is_sold || String(row.status || '').toLowerCase() === 'sold';
+            var purchaseStatus = String(row.purchase_status || '').toLowerCase();
+            var statusLabel = 'Submitted';
+            var statusCls = 'badge-conditional';
+            if (isSold) {
+              statusLabel = 'Sold';
+              statusCls = 'badge-sold';
+            } else if (purchaseStatus === 'approved') {
+              statusLabel = 'Approved';
+              statusCls = 'badge-qualified';
+            } else if (purchaseStatus === 'rejected') {
+              statusLabel = 'Rejected';
+              statusCls = 'badge-not-qualified';
+            } else {
+              statusLabel = 'Submitted';
+              statusCls = 'badge-conditional';
+            }
+
+            var statusHtml = '<span class="sqh-badge ' + statusCls + '">' + _escHtml(statusLabel) + '</span>';
+
+            var actionsHtml = '<div class="d-flex gap-2 flex-nowrap justify-content-end align-items-center">'
+              + '  <button type="button" class="btn btn-sm btn-outline-blue purchase-list-view-form-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '"' + (row.can_view_form ? '' : ' disabled') + ' title="View Buyer Information Form">'
+              + '    <i class="fas fa-eye me-1"></i>View Form'
+              + '  </button>';
+
+            if (isSold) {
+              actionsHtml += '  <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Already Sold">'
+                + '    <i class="fas fa-check-double me-1"></i>Sold'
+                + '  </button>';
+            } else {
+              actionsHtml += '  <button type="button" class="btn btn-sm btn-lime purchase-list-mark-sold-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '" title="Mark as Sold">'
+                + '    <i class="fas fa-tag me-1"></i>Mark as Sold'
+                + '  </button>';
+            }
+
+            actionsHtml += '  <button type="button" class="btn btn-sm btn-outline-crimson purchase-list-delete-form-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '"' + (row.can_view_form ? '' : ' disabled') + ' title="Delete Form">'
+              + '    <i class="fas fa-trash"></i>'
+              + '  </button>'
+              + '</div>';
+
+            tr.innerHTML = ''
+              + '<td>' + clientDisplay + '</td>'
+              + '<td>' + submittedDateText + '</td>'
+              + '<td>' + unitPriceText + '</td>'
+              + '<td>' + statusHtml + '</td>'
+              + '<td class="text-end">' + actionsHtml + '</td>';
+
+            submittedBodyEl.appendChild(tr);
+          });
+        }
       }
 
-      rows.forEach(function (row) {
-        var tr = document.createElement('tr');
-        var status = (row.status || 'pending').toLowerCase();
-        var statusCls = status === 'visited' ? 'badge-qualified' : (status === 'sold' ? 'badge-not-qualified' : 'badge-conditional');
-        var formText = row.purchase_form_label || (row.purchase_form_submitted ? 'Submitted' : 'Not submitted yet');
-        var purchaseStatus = String(row.purchase_status || '').toLowerCase();
-        var purchaseLabel = 'No Submission';
-        var purchaseCls = 'badge-conditional';
-        if (purchaseStatus === 'approved') {
-          purchaseLabel = 'Approved';
-          purchaseCls = 'badge-qualified';
-        } else if (purchaseStatus === 'pending') {
-          purchaseLabel = 'Pending';
-          purchaseCls = 'badge-conditional';
-        } else if (purchaseStatus === 'rejected') {
-          purchaseLabel = 'Rejected';
-          purchaseCls = 'badge-not-qualified';
-        }
-        var clientId = row.client_id;
-        var clientDisplay = clientId
-          ? '<a href="javascript:void(0)" class="fw-semibold text-decoration-none purchase-list-client-btn text-dark" data-client-id="' + clientId + '" title="View Full Client Account Details">'
-            + '<i class="fas fa-user-circle text-primary me-1"></i>' + _escHtml(row.client_name || 'Client')
-            + '</a>'
-          : '<span class="fw-semibold">' + _escHtml(row.client_name || 'Client') + '</span>';
+      // ── Render Tab 2: Visited Leads (Pending Submission) ──
+      if (visitedBodyEl) {
+        visitedBodyEl.innerHTML = '';
+        if (!visitedLeadsRows.length) {
+          if (visitedEmptyEl) visitedEmptyEl.classList.remove('d-none');
+        } else {
+          if (visitedEmptyEl) visitedEmptyEl.classList.add('d-none');
+          visitedLeadsRows.forEach(function (row) {
+            var tr = document.createElement('tr');
+            var clientId = row.client_id;
+            var clientDisplay = clientId
+              ? '<a href="javascript:void(0)" class="fw-semibold text-decoration-none purchase-list-client-btn text-dark" data-client-id="' + clientId + '" title="View Full Client Account Details">'
+                + '<i class="fas fa-user-circle text-primary me-1"></i>' + _escHtml(row.client_name || 'Client')
+                + '</a>'
+              : '<span class="fw-semibold">' + _escHtml(row.client_name || 'Client') + '</span>';
 
-        tr.innerHTML = ''
-          + '<td>' + clientDisplay + '</td>'
-          + '<td>' + _escHtml(row.preferred_date || '—') + '</td>'
-          + '<td>' + _escHtml(formText) + '</td>'
-          + '<td><span class="sqh-badge ' + statusCls + '">' + _escHtml(status.charAt(0).toUpperCase() + status.slice(1)) + '</span></td>'
-          + '<td><span class="sqh-badge ' + purchaseCls + '">' + _escHtml(purchaseLabel) + '</span></td>'
-          + '<td>'
-          + '  <div class="d-flex gap-2 flex-nowrap">'
-          + (clientId ? '    <button type="button" class="btn btn-sm btn-outline-secondary purchase-list-client-btn" data-client-id="' + clientId + '" title="View Full Client Account Details"><i class="fas fa-user"></i></button>' : '')
-          + '    <button type="button" class="btn btn-sm btn-outline-blue purchase-list-view-form-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '"' + (row.can_view_form ? '' : ' disabled') + ' title="View Buyer Information Form">'
-          + '      <i class="fas fa-eye me-1"></i>'
-          + '    </button>'
-          + '    <button type="button" class="btn btn-sm btn-outline-crimson purchase-list-delete-form-btn" data-trip-id="' + _escHtml(String(row.trip_id || '')) + '"' + (row.can_view_form ? '' : ' disabled') + ' title="Delete Form">'
-          + '      <i class="fas fa-trash me-1"></i>'
-          + '    </button>'
-          + '  </div>'
-          + '</td>';
-        bodyEl.appendChild(tr);
-      });
+            var visitDateText = _escHtml(row.visit_date || row.preferred_date || '—');
+
+            var contactHtml = '<div class="d-flex flex-column gap-1">'
+              + (row.client_phone ? '<span class="small"><i class="fas fa-phone text-muted me-1"></i>' + _escHtml(row.client_phone) + '</span>' : '')
+              + (row.client_email ? '<span class="small"><i class="fas fa-envelope text-muted me-1"></i>' + _escHtml(row.client_email) + '</span>' : '')
+              + (!row.client_phone && !row.client_email ? '<span class="text-muted small">—</span>' : '')
+              + '</div>';
+
+            var followUpStatusHtml = '<span class="sqh-badge badge-conditional"><i class="fas fa-clock me-1"></i>Awaiting Form Submission</span>';
+
+            var actionsHtml = '<div class="d-flex gap-2 flex-nowrap justify-content-end align-items-center">'
+              + (clientId
+                ? '<button type="button" class="btn btn-sm btn-outline-primary purchase-list-client-btn" data-client-id="' + clientId + '" title="View Full Client Account Details"><i class="fas fa-user me-1"></i>View Client Profile</button>'
+                : '<span class="text-muted small">—</span>')
+              + '</div>';
+
+            tr.innerHTML = ''
+              + '<td>' + clientDisplay + '</td>'
+              + '<td>' + visitDateText + '</td>'
+              + '<td>' + contactHtml + '</td>'
+              + '<td>' + followUpStatusHtml + '</td>'
+              + '<td class="text-end">' + actionsHtml + '</td>';
+
+            visitedBodyEl.appendChild(tr);
+          });
+        }
+      }
     })
     .catch(function (err) {
       if (summaryEl) summaryEl.textContent = 'Unable to load entries.';
-      if (bodyEl) bodyEl.innerHTML = '';
-      if (emptyEl) emptyEl.classList.remove('d-none');
+      if (submittedBadgeEl) submittedBadgeEl.textContent = '0';
+      if (visitedBadgeEl) visitedBadgeEl.textContent = '0';
+      if (submittedBodyEl) submittedBodyEl.innerHTML = '';
+      if (visitedBodyEl) visitedBodyEl.innerHTML = '';
+      if (submittedEmptyEl) submittedEmptyEl.classList.remove('d-none');
+      if (visitedEmptyEl) visitedEmptyEl.classList.remove('d-none');
       if (typeof showToast === 'function') showToast((err && err.message) || 'Unable to load purchase list.', 'danger');
     });
 }
@@ -3757,7 +3874,7 @@ _bind('purchaseFormActionConfirmBtn', 'click', function () {
 function _validateLoanDetailsForApproval() {
   var requiredIds = [
     'loanUnitId', 'loanSellingPrice', 'loanProcessingFee', 'loanAmount', 'loanDownpayment',
-    'loanReservationFee', 'loanPromoDisc', 'loanOrPrNo', 'loanOrPrDate', 'loanBookingOfficer',
+    'loanReservationFee', 'loanOrPrNo', 'loanOrPrDate', 'loanBookingOfficer',
     'loanFinancing', 'loanDownpaymentTerm', 'loanTerm'
   ];
 
@@ -3769,6 +3886,43 @@ function _validateLoanDetailsForApproval() {
     if (!val) {
       showToast('Please complete all Loan Details fields before marking this purchase as Sold.', 'warning');
       try { el.focus(); } catch (_) {}
+      return false;
+    }
+  }
+
+  var finEl = document.getElementById('loanFinancing');
+  if (finEl && finEl.value === 'cash') {
+    var cd = document.getElementById('loanCashDays');
+    if (!cd || !String(cd.value || '').trim()) {
+      showToast('Please specify the cash payment days (e.g. 30 days).', 'warning');
+      try { cd.focus(); } catch (_) {}
+      return false;
+    }
+  } else if (finEl && finEl.value === 'others') {
+    var fo = document.getElementById('loanFinancingOther');
+    if (!fo || !String(fo.value || '').trim()) {
+      showToast('Please specify the Financing details.', 'warning');
+      try { fo.focus(); } catch (_) {}
+      return false;
+    }
+  }
+
+  var dpEl = document.getElementById('loanDownpaymentTerm');
+  if (dpEl && dpEl.value === 'others') {
+    var dpo = document.getElementById('loanDownpaymentTermOther');
+    if (!dpo || !String(dpo.value || '').trim()) {
+      showToast('Please specify the custom Downpayment Term.', 'warning');
+      try { dpo.focus(); } catch (_) {}
+      return false;
+    }
+  }
+
+  var ltEl = document.getElementById('loanTerm');
+  if (ltEl && ltEl.value === 'others') {
+    var lto = document.getElementById('loanTermOther');
+    if (!lto || !String(lto.value || '').trim()) {
+      showToast('Please specify the custom Loan Term.', 'warning');
+      try { lto.focus(); } catch (_) {}
       return false;
     }
   }
@@ -3786,7 +3940,72 @@ function _validateLoanDetailsForApproval() {
   return true;
 }
 
-function _openPurchaseFormView(tripId) {
+function _collectLoanDetails() {
+  var fields = [
+    'loanUnitId', 'loanSellingPrice', 'loanProcessingFee', 'loanAmount', 'loanDownpayment',
+    'loanReservationFee', 'loanPromoDisc', 'loanOrPrNo', 'loanOrPrDate', 'loanBookingOfficer',
+    'loanFinancing', 'loanCashDays', 'loanFinancingOther',
+    'loanDownpaymentTerm', 'loanDownpaymentTermOther',
+    'loanTerm', 'loanTermOther'
+  ];
+  var details = {};
+  fields.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+      details[id] = String(el.value || '').trim();
+    }
+  });
+  return details;
+}
+
+function _initLoanDetailCustomToggleListeners() {
+  var finEl = document.getElementById('loanFinancing');
+  if (finEl && !finEl.dataset.customBound) {
+    finEl.dataset.customBound = '1';
+    finEl.addEventListener('change', function() {
+      var v = String(finEl.value || '').toLowerCase();
+      var cashWrap = document.getElementById('loanFinancingCashWrap');
+      var otherInput = document.getElementById('loanFinancingOther');
+      if (cashWrap) cashWrap.classList.toggle('d-none', v !== 'cash');
+      if (otherInput) {
+        otherInput.classList.toggle('d-none', v !== 'others');
+        if (v === 'others') otherInput.focus();
+      }
+      if (v === 'cash') {
+        var cd = document.getElementById('loanCashDays');
+        if (cd && !cd.value) cd.value = '30';
+      }
+    });
+  }
+
+  var dpEl = document.getElementById('loanDownpaymentTerm');
+  if (dpEl && !dpEl.dataset.customBound) {
+    dpEl.dataset.customBound = '1';
+    dpEl.addEventListener('change', function() {
+      var v = String(dpEl.value || '').toLowerCase();
+      var otherInput = document.getElementById('loanDownpaymentTermOther');
+      if (otherInput) {
+        otherInput.classList.toggle('d-none', v !== 'others');
+        if (v === 'others') otherInput.focus();
+      }
+    });
+  }
+
+  var ltEl = document.getElementById('loanTerm');
+  if (ltEl && !ltEl.dataset.customBound) {
+    ltEl.dataset.customBound = '1';
+    ltEl.addEventListener('change', function() {
+      var v = String(ltEl.value || '').toLowerCase();
+      var otherInput = document.getElementById('loanTermOther');
+      if (otherInput) {
+        otherInput.classList.toggle('d-none', v !== 'others');
+        if (v === 'others') otherInput.focus();
+      }
+    });
+  }
+}
+
+function _openPurchaseFormView(tripId, skipShowModal) {
   var row = (_purchaseListState.rows || []).find(function (x) { return String(x.trip_id) === String(tripId); });
   if (!row) return;
   _purchaseFormViewState.tripId = row.trip_id;
@@ -4074,6 +4293,87 @@ function _openPurchaseFormView(tripId) {
     esigFileEl.value = row.esignature_filename || row.esignature_url || '';
   }
 
+  _initLoanDetailCustomToggleListeners();
+
+  // Populate Financing and custom inputs
+  var financingSelect = document.getElementById('loanFinancing');
+  var financingCashWrap = document.getElementById('loanFinancingCashWrap');
+  var financingCashDays = document.getElementById('loanCashDays');
+  var financingOther = document.getElementById('loanFinancingOther');
+  var finVal = normText(readPayloadValue('loanFinancing'));
+  var finOtherVal = normText(readPayloadValue('loanFinancingOther') || readPayloadValue('loan_financing_other') || readPayloadValue('loan_financing_custom'));
+  var cashDaysVal = normText(readPayloadValue('loanCashDays') || readPayloadValue('loan_cash_days'));
+
+  if (financingSelect) {
+    if (finVal.toLowerCase() === 'cash' || (!finVal && cashDaysVal)) {
+      financingSelect.value = 'cash';
+      if (financingCashWrap) financingCashWrap.classList.remove('d-none');
+      if (financingCashDays) financingCashDays.value = cashDaysVal || '30';
+      if (financingOther) { financingOther.classList.add('d-none'); financingOther.value = ''; }
+    } else if (finVal.toLowerCase() === 'in-house' || finVal.toLowerCase() === 'bank') {
+      financingSelect.value = finVal.toLowerCase();
+      if (financingCashWrap) financingCashWrap.classList.add('d-none');
+      if (financingOther) { financingOther.classList.add('d-none'); financingOther.value = ''; }
+    } else if (finVal.toLowerCase() === 'others' || finOtherVal || (finVal && finVal !== '—')) {
+      financingSelect.value = 'others';
+      if (financingCashWrap) financingCashWrap.classList.add('d-none');
+      if (financingOther) {
+        financingOther.classList.remove('d-none');
+        financingOther.value = finOtherVal || finVal.replace(/^others\s*[-:]*\s*/i, '');
+      }
+    } else {
+      financingSelect.value = '';
+      if (financingCashWrap) financingCashWrap.classList.add('d-none');
+      if (financingOther) { financingOther.classList.add('d-none'); financingOther.value = ''; }
+    }
+  }
+
+  // Populate Downpayment Term and custom inputs
+  var dpSelect = document.getElementById('loanDownpaymentTerm');
+  var dpOther = document.getElementById('loanDownpaymentTermOther');
+  var dpVal = normText(readPayloadValue('loanDownpaymentTerm'));
+  var dpOtherVal = normText(readPayloadValue('loanDownpaymentTermOther') || readPayloadValue('loan_downpayment_term_other') || readPayloadValue('loan_dp_term_custom'));
+  var stdDp = ['12', '18', '24', '30'];
+
+  if (dpSelect) {
+    if (stdDp.indexOf(dpVal) >= 0) {
+      dpSelect.value = dpVal;
+      if (dpOther) { dpOther.classList.add('d-none'); dpOther.value = ''; }
+    } else if (dpVal.toLowerCase() === 'others' || dpOtherVal || (dpVal && dpVal !== '—')) {
+      dpSelect.value = 'others';
+      if (dpOther) {
+        dpOther.classList.remove('d-none');
+        dpOther.value = dpOtherVal || dpVal.replace(/^others\s*[-:]*\s*/i, '');
+      }
+    } else {
+      dpSelect.value = '';
+      if (dpOther) { dpOther.classList.add('d-none'); dpOther.value = ''; }
+    }
+  }
+
+  // Populate Loan Term and custom inputs
+  var ltSelect = document.getElementById('loanTerm');
+  var ltOther = document.getElementById('loanTermOther');
+  var ltVal = normText(readPayloadValue('loanTerm'));
+  var ltOtherVal = normText(readPayloadValue('loanTermOther') || readPayloadValue('loan_term_other') || readPayloadValue('loan_term_custom'));
+  var stdLt = ['3', '5', '10', '15', '18'];
+
+  if (ltSelect) {
+    if (stdLt.indexOf(ltVal) >= 0) {
+      ltSelect.value = ltVal;
+      if (ltOther) { ltOther.classList.add('d-none'); ltOther.value = ''; }
+    } else if (ltVal.toLowerCase() === 'others' || ltOtherVal || (ltVal && ltVal !== '—')) {
+      ltSelect.value = 'others';
+      if (ltOther) {
+        ltOther.classList.remove('d-none');
+        ltOther.value = ltOtherVal || ltVal.replace(/^others\s*[-:]*\s*/i, '');
+      }
+    } else {
+      ltSelect.value = '';
+      if (ltOther) { ltOther.classList.add('d-none'); ltOther.value = ''; }
+    }
+  }
+
   var editableLoanIds = {
     loanUnitId: 1,
     loanSellingPrice: 1,
@@ -4086,14 +4386,18 @@ function _openPurchaseFormView(tripId) {
     loanOrPrDate: 1,
     loanBookingOfficer: 1,
     loanFinancing: 1,
+    loanCashDays: 1,
+    loanFinancingOther: 1,
     loanDownpaymentTerm: 1,
-    loanTerm: 1
+    loanDownpaymentTermOther: 1,
+    loanTerm: 1,
+    loanTermOther: 1
   };
 
   if (modalBody) {
     modalBody.querySelectorAll('input, select, textarea').forEach(function(el) {
       if (!el || !el.id || el.type === 'hidden') return;
-      var allowLoanEdit = (status === 'pending');
+      var allowLoanEdit = (status !== 'rejected');
       var allowEdit = !!editableLoanIds[el.id] && allowLoanEdit;
       if (el.type === 'file' || el.type === 'checkbox' || el.tagName === 'SELECT') {
         el.disabled = !allowEdit;
@@ -4113,6 +4417,12 @@ function _openPurchaseFormView(tripId) {
 
   var soldBtn = document.getElementById('purchaseFormMarkSoldBtn');
   var rejectBtn = document.getElementById('purchaseFormRejectBtn');
+  var saveLoanBtn = document.getElementById('purchaseFormSaveLoanBtn');
+  if (saveLoanBtn) {
+    var canSaveLoan = (status !== 'rejected');
+    saveLoanBtn.classList.toggle('d-none', !canSaveLoan);
+    saveLoanBtn.disabled = !canSaveLoan;
+  }
   if (soldBtn) {
     var canMarkSold = !row.is_sold && status !== 'rejected' && status !== 'approved';
     soldBtn.classList.toggle('d-none', !canMarkSold);
@@ -4123,6 +4433,12 @@ function _openPurchaseFormView(tripId) {
     rejectBtn.classList.toggle('d-none', !canReject);
     rejectBtn.disabled = !canReject;
     rejectBtn.dataset.tripId = String(row.trip_id || '');
+  }
+
+  var pdfBtn = document.getElementById('purchaseFormExportPdfBtn');
+  if (pdfBtn) {
+    pdfBtn.href = '/trip/' + encodeURIComponent(row.trip_id) + '/buyer-form/print';
+    pdfBtn.removeAttribute('disabled');
   }
 
   var esigImg = document.getElementById('purchaseFormEsigImage');
@@ -4144,9 +4460,11 @@ function _openPurchaseFormView(tripId) {
     }
   }
 
-  setTimeout(function () {
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('purchaseFormViewModal')).show();
-  }, listModal ? 170 : 0);
+  if (!skipShowModal) {
+    setTimeout(function () {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('purchaseFormViewModal')).show();
+    }, listModal ? 170 : 0);
+  }
 }
 
 _bind('purchaseFormMarkSoldBtn', 'click', function() {
@@ -4175,6 +4493,7 @@ _bind('purchaseFormSoldConfirmBtn', 'click', function() {
   var tripId = _purchaseFormViewState.tripId;
   var sellingPriceRaw = (document.getElementById('loanSellingPrice') || {}).value || '';
   var sellingPrice = parseFloat(String(sellingPriceRaw).replace(/[^0-9.]/g, ''));
+  var loanDetails = _collectLoanDetails();
 
   btn.disabled = true;
   var oldHtml = btn.innerHTML;
@@ -4188,7 +4507,8 @@ _bind('purchaseFormSoldConfirmBtn', 'click', function() {
     },
     body: JSON.stringify({
       selling_price: isNaN(sellingPrice) ? null : sellingPrice,
-      note: 'Marked as sold from Purchase Form modal by admin.'
+      note: 'Marked as sold from Purchase Form modal by admin.',
+      loan_details: loanDetails
     })
   })
     .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
@@ -4210,6 +4530,17 @@ _bind('purchaseFormSoldConfirmBtn', 'click', function() {
         if (String(item.trip_id) === String(tripId)) {
           item.is_sold = true;
           item.status = 'sold';
+          item.purchase_status = 'approved';
+          var curData = {};
+          try { curData = item.purchase_form_data ? JSON.parse(item.purchase_form_data) : {}; } catch(_) {}
+          Object.keys(loanDetails).forEach(function(k) {
+            curData[k] = loanDetails[k];
+          });
+          curData['_purchase_form_status'] = 'approved';
+          item.purchase_form_data = JSON.stringify(curData);
+          if (loanDetails.loanUnitId) item.selected_unit = loanDetails.loanUnitId;
+          if (loanDetails.loanSellingPrice) item.selected_price = loanDetails.loanSellingPrice;
+          item.selected_unit_price = (item.selected_unit || '—') + ' • ' + (item.selected_price || '—');
         }
         return item;
       });
@@ -4219,6 +4550,61 @@ _bind('purchaseFormSoldConfirmBtn', 'click', function() {
       btn.disabled = false;
       btn.innerHTML = oldHtml;
       showToast('Network error while marking model as sold.', 'danger');
+    });
+});
+
+_bind('purchaseFormSaveLoanBtn', 'click', function() {
+  var tripId = _purchaseFormViewState.tripId;
+  if (!tripId) return;
+  var btn = this;
+  var loanDetails = _collectLoanDetails();
+
+  btn.disabled = true;
+  var oldHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+
+  fetch('/admin/trip/' + encodeURIComponent(tripId) + '/save-loan-details', {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': csrfToken(),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      loan_details: loanDetails
+    })
+  })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+      btn.disabled = false;
+      btn.innerHTML = oldHtml;
+      if (!res.ok || !res.data || !res.data.ok) {
+        showToast((res.data && res.data.error) || 'Failed to save loan details.', 'danger');
+        return;
+      }
+
+      showToast('Loan details saved successfully.', 'success');
+
+      if (_purchaseListState.rows) {
+        _purchaseListState.rows = _purchaseListState.rows.map(function(item) {
+          if (String(item.trip_id) === String(tripId)) {
+            var curData = {};
+            try { curData = item.purchase_form_data ? JSON.parse(item.purchase_form_data) : {}; } catch(_) {}
+            Object.keys(loanDetails).forEach(function(k) {
+              curData[k] = loanDetails[k];
+            });
+            item.purchase_form_data = JSON.stringify(curData);
+            if (loanDetails.loanUnitId) item.selected_unit = loanDetails.loanUnitId;
+            if (loanDetails.loanSellingPrice) item.selected_price = loanDetails.loanSellingPrice;
+            item.selected_unit_price = (item.selected_unit || '—') + ' • ' + (item.selected_price || '—');
+          }
+          return item;
+        });
+      }
+    })
+    .catch(function() {
+      btn.disabled = false;
+      btn.innerHTML = oldHtml;
+      showToast('Network error while saving loan details.', 'danger');
     });
 });
 
@@ -4234,8 +4620,48 @@ _bind('purchaseFormSoldConfirmBtn', 'click', function() {
       setTimeout(function () {
         bootstrap.Modal.getOrCreateInstance(document.getElementById('purchaseFormViewModal')).show();
       }, 120);
+    } else if (_purchaseListState.propertyId) {
+      setTimeout(function () {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('purchaseListModal')).show();
+      }, 120);
     }
     _purchaseSoldConfirmState.returnToView = false;
+  });
+})();
+
+(function initPurchaseListTabSwitching() {
+  var tabSub = document.getElementById('tab-purchase-submitted');
+  var tabVis = document.getElementById('tab-purchase-visited');
+  var paneSub = document.getElementById('pane-purchase-submitted');
+  var paneVis = document.getElementById('pane-purchase-visited');
+  if (!tabSub || !tabVis || !paneSub || !paneVis) return;
+
+  function switchTab(target) {
+    if (target === 'visited') {
+      tabSub.classList.remove('active');
+      tabSub.setAttribute('aria-selected', 'false');
+      tabVis.classList.add('active');
+      tabVis.setAttribute('aria-selected', 'true');
+      paneSub.classList.remove('show', 'active');
+      paneVis.classList.add('show', 'active');
+    } else {
+      tabVis.classList.remove('active');
+      tabVis.setAttribute('aria-selected', 'false');
+      tabSub.classList.add('active');
+      tabSub.setAttribute('aria-selected', 'true');
+      paneVis.classList.remove('show', 'active');
+      paneSub.classList.add('show', 'active');
+    }
+  }
+
+  tabSub.addEventListener('click', function(e) {
+    e.preventDefault();
+    switchTab('submitted');
+  });
+
+  tabVis.addEventListener('click', function(e) {
+    e.preventDefault();
+    switchTab('visited');
   });
 })();
 
@@ -4528,6 +4954,7 @@ document.addEventListener('click', function(e) {
   var pendingBtn = e.target.closest('.pvm-full-details-btn');
   var purchaseBtn = e.target.closest('.pvm-purchase-list-btn');
   var purchaseViewBtn = e.target.closest('.purchase-list-view-form-btn');
+  var purchaseMarkSoldBtn = e.target.closest('.purchase-list-mark-sold-btn');
   var purchaseDeleteBtn = e.target.closest('.purchase-list-delete-form-btn');
   var purchaseClientBtn = e.target.closest('.purchase-list-client-btn');
   var pendingClientBtn = e.target.closest('.pd-view-client-btn');
@@ -4557,6 +4984,30 @@ document.addEventListener('click', function(e) {
   }
   if (purchaseViewBtn) {
     _openPurchaseFormView(purchaseViewBtn.dataset.tripId);
+    return;
+  }
+  if (purchaseMarkSoldBtn) {
+    e.preventDefault();
+    var sTripId = purchaseMarkSoldBtn.dataset.tripId;
+    var sRow = (_purchaseListState.rows || []).find(function (x) { return String(x.trip_id) === String(sTripId); });
+    if (!sRow) return;
+    if (sRow.is_sold || String(sRow.status || '').toLowerCase() === 'sold') {
+      showToast('This model is already marked as sold.', 'info');
+      return;
+    }
+    _openPurchaseFormView(sTripId, true);
+    if (_validateLoanDetailsForApproval()) {
+      var soldEl = document.getElementById('purchaseFormSoldConfirmModal');
+      _purchaseSoldConfirmState.returnToView = false;
+      _purchaseSoldConfirmState.actionCompleted = false;
+      setTimeout(function () {
+        bootstrap.Modal.getOrCreateInstance(soldEl).show();
+      }, 160);
+    } else {
+      setTimeout(function () {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('purchaseFormViewModal')).show();
+      }, 160);
+    }
     return;
   }
   if (purchaseBtn && !inModal) {
@@ -6831,6 +7282,180 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
   }
 
+  var _adminHdmImages = [];
+  var _adminHdmIdx = 0;
+
+  function _adminHdmShowSlide(idx) {
+    var imgEl = document.getElementById('adminHdmImg');
+    if (!imgEl || !_adminHdmImages.length) return;
+    _adminHdmIdx = (idx + _adminHdmImages.length) % _adminHdmImages.length;
+    if (window.SqhImageCache && typeof SqhImageCache.swap === 'function') {
+      SqhImageCache.swap(imgEl, _adminHdmImages[_adminHdmIdx], function () { imgEl.style.opacity = '1'; });
+      SqhImageCache.preloadNeighbors(_adminHdmImages, _adminHdmIdx);
+    } else {
+      imgEl.src = (typeof sqhImgSrc === 'function') ? sqhImgSrc(_adminHdmImages[_adminHdmIdx]) : _adminHdmImages[_adminHdmIdx];
+      imgEl.style.opacity = '1';
+    }
+    document.querySelectorAll('#adminHdmDots .sub-preview-dot').forEach(function(d, i) {
+      d.classList.toggle('active', i === _adminHdmIdx);
+    });
+  }
+
+  function _openAdminTripHouseDetailModal(propId, tripRow) {
+    var modalEl = document.getElementById('adminTripHouseDetailModal');
+    if (!modalEl) return;
+
+    var card = propId ? document.querySelector('#propCardsGrid .prop-card-clickable[data-prop-id="' + propId + '"]') : null;
+    var d = card ? card.dataset : {};
+
+    function fmt(val) {
+      if (val === undefined || val === null || val === '') return '—';
+      var n = Number(String(val).replace(/,/g, ''));
+      if (!isFinite(n) || n === 0) return '—';
+      return '₱' + n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    var propName = d.propName || (tripRow ? tripRow.getAttribute('data-property-name') : '') || 'House Model';
+    var nameEl = document.getElementById('adminHdmName');
+    if (nameEl) nameEl.textContent = propName;
+
+    var locEl = document.getElementById('adminHdmLocation');
+    if (locEl) {
+      var locSpan = locEl.querySelector('span');
+      if (locSpan) locSpan.textContent = d.propLocation || d.propSubdivision || 'Location details not specified';
+    }
+
+    var statusBadgeEl = document.getElementById('adminHdmStatusBadge');
+    if (statusBadgeEl) {
+      var st = (d.propListingStatus || 'available').toLowerCase();
+      var badgeHtml = '<span class="sqh-badge badge-qualified">Available</span>';
+      if (st === 'sold') badgeHtml = '<span class="sqh-badge badge-sold">Sold</span>';
+      else if (st === 'reserved') badgeHtml = '<span class="sqh-badge badge-conditional">Reserved</span>';
+      statusBadgeEl.innerHTML = badgeHtml;
+    }
+
+    // Chips
+    var chipsEl = document.getElementById('adminHdmChips');
+    if (chipsEl) {
+      var chips = '';
+      if (d.propBedrooms) chips += '<span class="pvm-icon-chip"><i class="fas fa-bed me-1" style="color:var(--clr-accent-dk);"></i>' + d.propBedrooms + ' Bed' + (parseInt(d.propBedrooms, 10) > 1 ? 's' : '') + '</span>';
+      if (d.propBathrooms) chips += '<span class="pvm-icon-chip"><i class="fas fa-bath me-1" style="color:var(--clr-blue);"></i>' + d.propBathrooms + ' Bath' + (parseInt(d.propBathrooms, 10) > 1 ? 's' : '') + '</span>';
+      if (d.propStoreys) chips += '<span class="pvm-icon-chip"><i class="fas fa-layer-group me-1" style="color:var(--clr-primary);"></i>' + d.propStoreys + ' Storey' + (parseInt(d.propStoreys, 10) > 1 ? 's' : '') + '</span>';
+      if (d.propFloorArea) chips += '<span class="pvm-icon-chip"><i class="fas fa-ruler-combined me-1"></i>' + d.propFloorArea + ' sqm Floor</span>';
+      if (d.propLotArea) chips += '<span class="pvm-icon-chip"><i class="fas fa-vector-square me-1"></i>' + d.propLotArea + ' sqm Lot</span>';
+      if (d.propUnitId) chips += '<span class="pvm-icon-chip"><i class="fas fa-hashtag me-1"></i>Unit ' + d.propUnitId + '</span>';
+      chipsEl.innerHTML = chips;
+    }
+
+    // Images
+    var rawImgs = d.propImages || (tripRow ? tripRow.getAttribute('data-property-images') : '') || '';
+    _adminHdmImages = rawImgs.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+    _adminHdmIdx = 0;
+
+    var wrap = document.getElementById('adminHdmImgWrap');
+    var holder = document.getElementById('adminHdmImgPlaceholder');
+    var img = document.getElementById('adminHdmImg');
+    var prev = document.getElementById('adminHdmPrev');
+    var next = document.getElementById('adminHdmNext');
+    var dots = document.getElementById('adminHdmDots');
+
+    if (_adminHdmImages.length && wrap && img) {
+      img.classList.remove('d-none');
+      if (holder) holder.classList.add('d-none');
+      if (window.SqhImageCache && typeof SqhImageCache.swap === 'function') {
+        SqhImageCache.swap(img, _adminHdmImages[0], function () { img.style.opacity = '1'; });
+        SqhImageCache.preloadAll(_adminHdmImages);
+      } else {
+        img.src = (typeof sqhImgSrc === 'function') ? sqhImgSrc(_adminHdmImages[0]) : _adminHdmImages[0];
+        img.style.opacity = '1';
+      }
+      if (_adminHdmImages.length > 1) {
+        if (prev) prev.classList.remove('d-none');
+        if (next) next.classList.remove('d-none');
+        if (dots) {
+          dots.innerHTML = _adminHdmImages.map(function(_, i) {
+            return '<span class="sub-preview-dot' + (i === 0 ? ' active' : '') + '" data-idx="' + i + '"></span>';
+          }).join('');
+          dots.querySelectorAll('.sub-preview-dot').forEach(function(dot) {
+            dot.addEventListener('click', function() { _adminHdmShowSlide(parseInt(this.dataset.idx, 10)); });
+          });
+        }
+      } else {
+        if (prev) prev.classList.add('d-none');
+        if (next) next.classList.add('d-none');
+        if (dots) dots.innerHTML = '';
+      }
+    } else {
+      if (img) img.classList.add('d-none');
+      if (holder) holder.classList.remove('d-none');
+      if (prev) prev.classList.add('d-none');
+      if (next) next.classList.add('d-none');
+      if (dots) dots.innerHTML = '';
+    }
+
+    // Pricing & Salary
+    var pricingData = null;
+    try {
+      pricingData = (typeof d.propPricingJson === 'string') ? JSON.parse(d.propPricingJson) : (d.propPricingJson || {});
+    } catch (_) {
+      pricingData = {};
+    }
+
+    var tcpVal = pricingData.total_contract_price || pricingData.tcp || d.propPrice || 0;
+    var resFeeVal = pricingData.reservation_fee || d.propReservationFee || 0;
+    var monthlyDpVal = pricingData.monthly_downpayment || 0;
+    var dpTermsVal = pricingData.downpayment_terms_months || d.propDownpaymentTermsMonths || 0;
+    var amort = pricingData.amortization || {};
+    var req = pricingData.required_monthly_income || {};
+
+    var setT = function(id, text) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = text;
+    };
+
+    setT('adminHdmTcp', fmt(tcpVal));
+    setT('adminHdmResFee', fmt(resFeeVal));
+    setT('adminHdmMonthlyDp', fmt(monthlyDpVal));
+    setT('adminHdmDpTerms', dpTermsVal ? (dpTermsVal + ' months downpayment') : '—');
+    setT('adminHdmReqIncome20', fmt(req['20']) !== '—' ? (fmt(req['20']) + ' / mo') : '—');
+    setT('adminHdmAmort20', fmt(amort['20']) !== '—' ? ('Est. Amort: ' + fmt(amort['20']) + ' / mo') : '');
+
+    // Term Breakdown
+    setT('adminHdmAmort5', fmt(amort['5']));
+    setT('adminHdmReq5', fmt(req['5']));
+    setT('adminHdmAmort10', fmt(amort['10']));
+    setT('adminHdmReq10', fmt(req['10']));
+    setT('adminHdmAmort15', fmt(amort['15']));
+    setT('adminHdmReq15', fmt(req['15']));
+    setT('adminHdmAmort20Row', fmt(amort['20']));
+    setT('adminHdmReq20Row', fmt(req['20']));
+
+    // Overview Grid
+    var mType = (d.propType || 'House and Lot').replace(/-/g, ' ');
+    var uType = (d.propUnitType || '—').replace(/-/g, ' ');
+    setT('adminHdmModelType', mType.charAt(0).toUpperCase() + mType.slice(1));
+    setT('adminHdmUnitType', uType.charAt(0).toUpperCase() + uType.slice(1));
+    setT('adminHdmSubdiv', d.propSubdivision || d.propProjectName || '—');
+
+    var blkLotParts = [];
+    if (d.propBlock) blkLotParts.push('Block ' + d.propBlock);
+    if (d.propLotNo) blkLotParts.push('Lot ' + d.propLotNo);
+    if (d.propUnitId) blkLotParts.push('Unit ' + d.propUnitId);
+    setT('adminHdmBlockLot', blkLotParts.join(', ') || '—');
+
+    // Description
+    var descWrap = document.getElementById('adminHdmDescWrap');
+    var descEl = document.getElementById('adminHdmDesc');
+    if (d.propDescription && descWrap && descEl) {
+      descEl.textContent = d.propDescription;
+      descWrap.classList.remove('d-none');
+    } else if (descWrap) {
+      descWrap.classList.add('d-none');
+    }
+
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  }
+
   function _setTripRowFinalized(tripId, status, note) {
     var row = document.getElementById('admin-trip-row-' + tripId);
     if (!row) return;
@@ -6879,6 +7504,10 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
 
     if (actionCell) {
       var clientId = String(row.getAttribute('data-client-id') || '').trim();
+      var propId = String(row.getAttribute('data-property-id') || '').trim();
+      var propBtnHtml = '  <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="' + propId + '" title="View House Details">'
+        + '    <i class="fas fa-home"></i>'
+        + '  </button>';
       if (status === 'approved') {
         actionCell.innerHTML = ''
           + '<div class="d-flex gap-1">'
@@ -6888,6 +7517,7 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
           + '  <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="' + clientId + '" title="View Client Details">'
           + '    <i class="fas fa-user"></i>'
           + '  </button>'
+          + propBtnHtml
           + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
           + '    <i class="fas fa-clipboard-list"></i>'
           + '  </button>'
@@ -6901,6 +7531,7 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
           + '  <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="' + clientId + '" title="View Client Details">'
           + '    <i class="fas fa-user"></i>'
           + '  </button>'
+          + propBtnHtml
           + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
           + '    <i class="fas fa-clipboard-list"></i>'
           + '  </button>'
@@ -6911,6 +7542,7 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
           + '  <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="' + clientId + '" title="View Client Details">'
           + '    <i class="fas fa-user"></i>'
           + '  </button>'
+          + propBtnHtml
           + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
           + '    <i class="fas fa-clipboard-list"></i>'
           + '  </button>'
@@ -7143,6 +7775,31 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
       e.preventDefault();
       var clientId = parseInt(openClientBtn.getAttribute('data-client-id'), 10);
       if (clientId) openUserModal(clientId);
+      return;
+    }
+
+    var prevHdmBtn = e.target.closest('#adminHdmPrev');
+    if (prevHdmBtn) {
+      e.preventDefault();
+      _adminHdmShowSlide(_adminHdmIdx - 1);
+      return;
+    }
+    var nextHdmBtn = e.target.closest('#adminHdmNext');
+    if (nextHdmBtn) {
+      e.preventDefault();
+      _adminHdmShowSlide(_adminHdmIdx + 1);
+      return;
+    }
+
+    var openPropBtn = e.target.closest('.open-property-modal-btn');
+    if (openPropBtn) {
+      e.preventDefault();
+      var propId = openPropBtn.getAttribute('data-property-id');
+      if (!propId) {
+        var tr = openPropBtn.closest('tr');
+        if (tr) propId = tr.getAttribute('data-property-id');
+      }
+      _openAdminTripHouseDetailModal(propId, openPropBtn.closest('tr'));
       return;
     }
 

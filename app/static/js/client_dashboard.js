@@ -1267,7 +1267,9 @@
     var loanFieldIds = [
       'loanUnitId', 'loanSellingPrice', 'loanProcessingFee', 'loanAmount', 'loanDownpayment',
       'loanReservationFee', 'loanPromoDisc', 'loanOrPrNo', 'loanOrPrDate', 'loanBookingOfficer',
-      'loanFinancing', 'loanDownpaymentTerm', 'loanTerm'
+      'loanFinancing', 'loanCashDays', 'loanFinancingOther',
+      'loanDownpaymentTerm', 'loanDownpaymentTermOther',
+      'loanTerm', 'loanTermOther'
     ];
     var loanFieldMap = {};
     loanFieldIds.forEach(function (id) {
@@ -1368,6 +1370,12 @@
       previewBtn.classList.remove('d-none');
     }
 
+    var printBtn = document.getElementById('buyerPrintFormBtn');
+    if (printBtn && tripId) {
+      printBtn.href = '/trip/' + encodeURIComponent(tripId) + '/buyer-form/print';
+      printBtn.classList.remove('d-none');
+    }
+
     var consentEl = document.getElementById('buyerConsentAccepted');
     if (consentEl) consentEl.checked = true;
 
@@ -1391,7 +1399,9 @@
       loanUnitId: 1, loanSellingPrice: 1, loanProcessingFee: 1, loanAmount: 1,
       loanDownpayment: 1, loanReservationFee: 1, loanPromoDisc: 1, loanOrPrNo: 1,
       loanOrPrDate: 1, loanBookingOfficer: 1, loanFinancing: 1,
-      loanDownpaymentTerm: 1, loanTerm: 1
+      loanCashDays: 1, loanFinancingOther: 1,
+      loanDownpaymentTerm: 1, loanDownpaymentTermOther: 1,
+      loanTerm: 1, loanTermOther: 1
     };
 
     form.querySelectorAll('input, select, textarea').forEach(function (el) {
@@ -1477,6 +1487,28 @@
     if (depSel) depSel.dispatchEvent(new Event('change'));
     var bankSel = document.getElementById('hasBankAccount');
     if (bankSel) bankSel.dispatchEvent(new Event('change'));
+
+    var finEl = document.getElementById('loanFinancing');
+    if (finEl) {
+      var finVal = String(finEl.value || '').toLowerCase();
+      var cashWrap = document.getElementById('loanFinancingCashWrap');
+      var finOther = document.getElementById('loanFinancingOther');
+      if (cashWrap) cashWrap.classList.toggle('d-none', finVal !== 'cash');
+      if (finOther) finOther.classList.toggle('d-none', finVal !== 'others');
+    }
+    var dpEl = document.getElementById('loanDownpaymentTerm');
+    if (dpEl) {
+      var dpVal = String(dpEl.value || '').toLowerCase();
+      var dpOther = document.getElementById('loanDownpaymentTermOther');
+      if (dpOther) dpOther.classList.toggle('d-none', dpVal !== 'others');
+    }
+    var ltEl = document.getElementById('loanTerm');
+    if (ltEl) {
+      var ltVal = String(ltEl.value || '').toLowerCase();
+      var ltOther = document.getElementById('loanTermOther');
+      if (ltOther) ltOther.classList.toggle('d-none', ltVal !== 'others');
+    }
+
     _syncBuyerSpouseSections();
     _wireEmploymentOthersToggle();
   }
@@ -2037,6 +2069,16 @@
       var showSubmitNew = purchaseStatus === 'rejected' && !freshMode;
       submitNewBtn.classList.toggle('d-none', !showSubmitNew);
       submitNewBtn.dataset.tripId = String(tripId || '');
+    }
+
+    var printBtn = document.getElementById('buyerPrintFormBtn');
+    if (printBtn) {
+      if (tripId && isSubmitted) {
+        printBtn.href = '/trip/' + encodeURIComponent(tripId) + '/buyer-form/print';
+        printBtn.classList.remove('d-none');
+      } else {
+        printBtn.classList.add('d-none');
+      }
     }
 
     _syncBuyerSpouseSections();
@@ -2601,6 +2643,7 @@
             document.querySelectorAll('.prop-card-clickable[data-prop-id="' + _checkPid + '"]').forEach(function(el) {
               el.dataset.detailRequestStatus = 'none';
               el.dataset.pricingApproved = '0';
+              el.dataset.detailRequestNote = '';
               var btn = el.querySelector('.prop-card-details-btn');
               if (btn) {
                 btn.dataset.detailStatus = 'none';
@@ -2609,12 +2652,31 @@
               }
             });
             renderPricingBreakdown('none', null);
+            var noteWrap = document.getElementById('pvmAdminNoteWrap');
+            if (noteWrap) noteWrap.classList.add('d-none');
             var detailsBtn = document.getElementById('pvmRequestDetailsBtn');
             if (detailsBtn) {
               detailsBtn.dataset.detailStatus = 'none';
               detailsBtn.className = 'btn btn-outline-blue';
               detailsBtn.innerHTML = '<i class="fas fa-file-signature me-1"></i> Request Full Details';
               detailsBtn.classList.remove('d-none');
+            }
+          } else if (d && d.ok && d.approved) {
+            var note = (d.note || '').trim();
+            document.querySelectorAll('.prop-card-clickable[data-prop-id="' + _checkPid + '"]').forEach(function(el) {
+              el.dataset.detailRequestNote = note;
+            });
+            card.dataset.detailRequestNote = note;
+            var noteWrap = document.getElementById('pvmAdminNoteWrap');
+            var noteText = document.getElementById('pvmAdminNoteText');
+            if (noteWrap && noteText) {
+              if (note) {
+                noteText.textContent = note;
+                noteWrap.classList.remove('d-none');
+              } else {
+                noteText.textContent = '';
+                noteWrap.classList.add('d-none');
+              }
             }
           }
         })
@@ -2811,6 +2873,20 @@
     }
 
     renderPricingBreakdown(effectiveDetailStatus, pricingData);
+
+    // ── Admin Note ──
+    var detailNote = (card.dataset.detailRequestNote || '').trim();
+    var noteWrap = document.getElementById('pvmAdminNoteWrap');
+    var noteText = document.getElementById('pvmAdminNoteText');
+    if (noteWrap && noteText) {
+      if (detailNote && (effectiveDetailStatus === 'approved' || isBoughtModel)) {
+        noteText.textContent = detailNote;
+        noteWrap.classList.remove('d-none');
+      } else {
+        noteText.textContent = '';
+        noteWrap.classList.add('d-none');
+      }
+    }
 
     // ── Qualification by selected loan year ──
     var qualWrap = document.getElementById('pvmQualWrap');
@@ -3147,6 +3223,7 @@
             document.querySelectorAll('.prop-card-clickable[data-prop-id="' + propId + '"]').forEach(function(el) {
               el.dataset.detailRequestStatus = 'none';
               el.dataset.pricingApproved = '0';
+              el.dataset.detailRequestNote = '';
               var btn = el.querySelector('.prop-card-details-btn');
               if (btn) {
                 btn.dataset.detailStatus = 'none';
@@ -3163,6 +3240,13 @@
             }
             toast('Your full details access for this property has been reset by admin. You may request details again.', 'info');
           } else {
+            if (d && d.ok && d.approved) {
+              var note = (d.note || '').trim();
+              document.querySelectorAll('.prop-card-clickable[data-prop-id="' + propId + '"]').forEach(function(el) {
+                el.dataset.detailRequestNote = note;
+              });
+              if (card) card.dataset.detailRequestNote = note;
+            }
             if (card) openPropDetail(card);
           }
         })

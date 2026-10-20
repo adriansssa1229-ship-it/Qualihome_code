@@ -1237,9 +1237,9 @@
     </div>
   </div>
 
-  <!-- -- Purchase List Modal ------------------------------------ -->
+  <!-- ── Purchase List Modal ──────────────────────────────────── -->
   <div class="modal fade" id="purchaseListModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
       <div class="modal-content sqh-modal">
         <div class="sqh-modal-header">
           <div class="d-flex align-items-center gap-2">
@@ -1249,32 +1249,77 @@
           <button type="button" class="sqh-modal-close" data-bs-dismiss="modal" aria-label="Close"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-body p-4">
-          <div class="d-flex align-items-center justify-content-between mb-3">
+          <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
             <div>
-              <div class="small text-muted">Property</div>
-              <div class="fw-semibold" id="purchaseListPropertyName">—</div>
+              <div class="small text-muted">Property Model</div>
+              <div class="fw-bold fs-5 text-dark" id="purchaseListPropertyName">—</div>
             </div>
             <div class="small text-muted" id="purchaseListSummary">Loading entries…</div>
           </div>
-          <div class="table-responsive">
-            <table class="table sqh-table mb-0" id="purchaseListTable">
-              <thead>
-                <tr>
-                  <th>Client</th>
-                  <th>Visit Date</th>
-                  <th>Purchase Form</th>                  
-                  <th>Trip Status</th>
-                  <th>Purchase Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="purchaseListTableBody"></tbody>
-            </table>
-          </div>
-          <div id="purchaseListEmpty" class="text-center text-muted py-4 d-none">
-            <i class="fas fa-file-circle-xmark fa-2x mb-2 d-block" style="color:var(--clr-border);"></i>
-            <span class="fw-semibold d-block mb-1">No purchase candidates yet.</span>
-            <span class="small">Trips marked as visited will appear here.</span>
+
+          <!-- Two Sub-tabs Navigation -->
+          <ul class="nav nav-tabs sqh-tabs mb-3" id="purchaseListTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="tab-purchase-submitted" data-bs-toggle="tab" data-bs-target="#pane-purchase-submitted" type="button" role="tab" aria-controls="pane-purchase-submitted" aria-selected="true">
+                <i class="fas fa-clipboard-check me-1"></i>Submitted Buyer Forms
+                <span class="badge bg-danger rounded-pill ms-2" id="purchaseSubmittedCountBadge">0</span>
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="tab-purchase-visited" data-bs-toggle="tab" data-bs-target="#pane-purchase-visited" type="button" role="tab" aria-controls="pane-purchase-visited" aria-selected="false">
+                <i class="fas fa-walking me-1"></i>Visited Leads (Pending Submission)
+                <span class="badge bg-secondary rounded-pill ms-2" id="purchaseVisitedCountBadge">0</span>
+              </button>
+            </li>
+          </ul>
+
+          <!-- Tab Panes Content -->
+          <div class="tab-content" id="purchaseListTabContent">
+            <!-- Tab 1: Submitted Buyer Forms -->
+            <div class="tab-pane fade show active" id="pane-purchase-submitted" role="tabpanel" aria-labelledby="tab-purchase-submitted">
+              <div class="table-responsive">
+                <table class="table sqh-table mb-0" id="purchaseSubmittedTable">
+                  <thead>
+                    <tr>
+                      <th>Client Name</th>
+                      <th>Submitted Date</th>
+                      <th>Selected Unit / Price</th>
+                      <th>Purchase Status</th>
+                      <th class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="purchaseSubmittedTableBody"></tbody>
+                </table>
+              </div>
+              <div id="purchaseSubmittedEmpty" class="text-center text-muted py-5 d-none">
+                <i class="fas fa-file-circle-xmark fa-2x mb-2 d-block" style="color:var(--clr-border);"></i>
+                <span class="fw-semibold d-block mb-1">No submitted buyer forms yet.</span>
+                <span class="small">Clients who formally submit their Buyer Information Sheet with their e-signature will appear here.</span>
+              </div>
+            </div>
+
+            <!-- Tab 2: Visited Leads (Pending Submission) -->
+            <div class="tab-pane fade" id="pane-purchase-visited" role="tabpanel" aria-labelledby="tab-purchase-visited">
+              <div class="table-responsive">
+                <table class="table sqh-table mb-0" id="purchaseVisitedTable">
+                  <thead>
+                    <tr>
+                      <th>Client Name</th>
+                      <th>Visit Date</th>
+                      <th>Contact Number / Email</th>
+                      <th>Follow-up Status</th>
+                      <th class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="purchaseVisitedTableBody"></tbody>
+                </table>
+              </div>
+              <div id="purchaseVisitedEmpty" class="text-center text-muted py-5 d-none">
+                <i class="fas fa-user-check fa-2x mb-2 d-block text-success" style="opacity:0.75;"></i>
+                <span class="fw-semibold d-block mb-1">No pending leads awaiting submission.</span>
+                <span class="small">All visited clients for this model have already submitted their Buyer Information Sheet.</span>
+              </div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -1823,23 +1868,33 @@
                     <label class="form-label">Financing</label>
                     <select id="loanFinancing" class="form-select sqh-form-control sqh-disabled-field buyer-icon-input">
                       <option value="">-- Select --</option>
-                      <option value="in-house">In House (Cash with ___ days)</option>
+                      <option value="in-house">In House</option>
+                      <option value="cash">Cash (with days)</option>
                       <option value="bank">Bank</option>
                       <option value="others">Others</option>
                     </select>
+                    <div id="loanFinancingCashWrap" class="mt-1 d-none">
+                      <div class="input-group input-group-sm">
+                        <span class="input-group-text" style="font-size:0.78rem;">Cash w/in</span>
+                        <input id="loanCashDays" class="form-control sqh-form-control buyer-icon-input" placeholder="e.g. 30" style="font-size:0.82rem;">
+                        <span class="input-group-text" style="font-size:0.78rem;">days</span>
+                      </div>
+                    </div>
+                    <input id="loanFinancingOther" class="form-control sqh-form-control mt-1 d-none buyer-icon-input" placeholder="Specify financing (e.g. Pag-IBIG)">
                   </div>
                   <div class="col-md-4">
                     <label class="form-label">Downpayment Term</label>
                     <select id="loanDownpaymentTerm" class="form-select sqh-form-control sqh-disabled-field buyer-icon-input">
                       <option value="">-- Select --</option>
                       <option value="12">12 MOS</option>
-                      <option value="15">15 MOS</option>
+                      <option value="18">18 MOS</option>
                       <option value="24">24 MOS</option>
                       <option value="30">30 MOS</option>
                       <option value="others">Others</option>
                     </select>
+                    <input id="loanDownpaymentTermOther" class="form-control sqh-form-control mt-1 d-none buyer-icon-input" placeholder="Specify DP term (e.g. 6 Months, 36 Months)">
                   </div>
-                  <div class="col-12">
+                  <div class="col-md-4">
                     <label class="form-label">Loan Term</label>
                     <select id="loanTerm" class="form-select sqh-form-control sqh-disabled-field buyer-icon-input">
                       <option value="">-- Select --</option>
@@ -1847,8 +1902,10 @@
                       <option value="5">5 YRS</option>
                       <option value="10">10 YRS</option>
                       <option value="15">15 YRS</option>
+                      <option value="18">18 YRS</option>
                       <option value="others">Others</option>
                     </select>
+                    <input id="loanTermOther" class="form-control sqh-form-control mt-1 d-none buyer-icon-input" placeholder="Specify loan term (e.g. 20 Years, 25 Years)">
                   </div>
                 </div>
               </div>
@@ -1887,10 +1944,12 @@
             </div>
           </form>
         </div>
-        <div class="modal-footer d-flex gap-2 justify-content-between">
-          <div class="d-flex gap-2">
+        <div class="modal-footer d-flex gap-2 justify-content-between flex-wrap">
+          <div class="d-flex gap-2 align-items-center flex-wrap">
             <button type="button" class="btn btn-outline-crimson d-none" id="purchaseFormRejectBtn"><i class="fas fa-ban me-1"></i>Reject</button>
             <button type="button" class="btn btn-lime d-none" id="purchaseFormMarkSoldBtn"><i class="fas fa-handshake me-1"></i>Sold To</button>
+            <button type="button" class="btn btn-primary" id="purchaseFormSaveLoanBtn"><i class="fas fa-save me-1"></i>Save Loan Details</button>
+            <a href="javascript:void(0)" target="_blank" class="btn btn-outline-blue" id="purchaseFormExportPdfBtn" title="Print / Export Buyer Information Sheet PDF"><i class="fas fa-print me-1"></i>Print / Save as PDF</a>
           </div>
           <button type="button" class="btn btn-outline-crimson" data-bs-dismiss="modal">Close</button>
         </div>
@@ -2855,6 +2914,7 @@
                   data-status="{{ row_status }}"
                   data-client-id="{{ t.client.id if t.client else '' }}"
                   data-client-name="{{ t.client.full_name if t.client else 'Client' }}"
+                  data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}"
                   data-property-name="{{ t.property_item.name if t.property_item else 'Property' }}"
                   data-property-images="{{ t.property_item.images if t.property_item else '' }}"
                   data-preferred-time="{{ (t.preferred_time|ph_time) if t.preferred_time else '—' }}"
@@ -2865,7 +2925,11 @@
                   data-preferred-date="{{ t.preferred_date.isoformat() if t.preferred_date else '' }}">
                 <td class="hide-tablet">{{ loop.index }}</td>
                 <td class="fw-semibold">{{ t.client.full_name if t.client else 'Client' }}</td>
-                <td>{{ t.property_item.name if t.property_item else 'Property' }}</td>
+                <td>
+                  <a href="#" class="open-property-modal-btn text-dark text-decoration-none fw-semibold" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
+                    {{ t.property_item.name if t.property_item else 'Property' }}
+                  </a>
+                </td>
                 <td class="text-nowrap">{{ t.preferred_date.strftime('%b %d, %Y') if t.preferred_date else '—' }}</td>
                 <td class="hide-tablet">{{ (t.preferred_time|ph_time) if t.preferred_time else '—' }}</td>
                 <td>
@@ -2918,6 +2982,9 @@
                     <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
                       <i class="fas fa-user"></i>
                     </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
+                      <i class="fas fa-home"></i>
+                    </button>
                   </div>
                   {% elif row_status == 'approved' %}
                   <div class="d-flex gap-1">
@@ -2926,6 +2993,9 @@
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
                       <i class="fas fa-user"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
+                      <i class="fas fa-home"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="{{ t.id }}" title="View Trip Request">
                       <i class="fas fa-clipboard-list"></i>
@@ -2938,6 +3008,9 @@
                   <div class="d-flex gap-1">
                     <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
                       <i class="fas fa-user"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
+                      <i class="fas fa-home"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="{{ t.id }}" title="View Trip Request">
                       <i class="fas fa-clipboard-list"></i>
@@ -3033,6 +3106,155 @@
                   <div class="small text-muted" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--clr-muted);margin-bottom:.25rem;">Admin Note</div>
                   <div class="fw-semibold" id="adminTrmNote">No note provided.</div>
                 </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-sm btn-outline-crimson" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- House Model View Modal (Read-Only) for Tripping Requests -->
+      <div class="modal fade" id="adminTripHouseDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+          <div class="modal-content sqh-modal" style="overflow-x:hidden;">
+            <div class="sqh-modal-header">
+              <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-home text-white"></i>
+                <span class="sqh-modal-title">House Model Details</span>
+              </div>
+              <button type="button" class="sqh-modal-close" data-bs-dismiss="modal" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body p-4">
+              <!-- Carousel -->
+              <div class="trm-carousel mb-3">
+                <div class="trm-carousel-img-wrap" id="adminHdmImgWrap" style="height:260px;position:relative;background:#111;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+                  <img id="adminHdmImg" src="" alt="Property image" class="trm-carousel-img d-none" style="width:100%;height:100%;object-fit:cover;">
+                  <div id="adminHdmImgPlaceholder" class="trm-carousel-placeholder" style="display:flex;align-items:center;justify-content:center;"><i class="fas fa-home" style="font-size:3.5rem;color:rgba(255,255,255,.25);"></i></div>
+                  <button type="button" class="trm-carousel-nav prev d-none" id="adminHdmPrev" aria-label="Previous image"><i class="fas fa-chevron-left"></i></button>
+                  <button type="button" class="trm-carousel-nav next d-none" id="adminHdmNext" aria-label="Next image"><i class="fas fa-chevron-right"></i></button>
+                </div>
+                <div class="trm-carousel-dots mt-2 text-center" id="adminHdmDots"></div>
+              </div>
+
+              <!-- Header: Model Name & Status & Location -->
+              <div class="d-flex align-items-start justify-content-between gap-3 mb-2">
+                <div>
+                  <h4 class="fw-bold mb-1" id="adminHdmName">—</h4>
+                  <p class="text-muted small mb-0" id="adminHdmLocation"><i class="fas fa-map-marker-alt me-1 text-danger"></i><span>—</span></p>
+                </div>
+                <div id="adminHdmStatusBadge" class="flex-shrink-0">
+                  <span class="sqh-badge badge-qualified">Available</span>
+                </div>
+              </div>
+
+              <!-- Specs Chips -->
+              <div id="adminHdmChips" class="pvm-icon-chips my-3"></div>
+
+              <!-- Key Pricing Summary Cards -->
+              <div class="row g-2 mb-3">
+                <div class="col-sm-6 col-md-3">
+                  <div class="p-3 rounded-3" style="background:#f8f9fb;border:1px solid var(--clr-border);">
+                    <div class="small text-muted text-uppercase fw-bold" style="font-size:0.68rem;letter-spacing:0.5px;">TOTAL CONTRACT PRICE</div>
+                    <div class="fw-bold text-dark fs-5 mt-1" id="adminHdmTcp">₱0.00</div>
+                  </div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                  <div class="p-3 rounded-3" style="background:#f8f9fb;border:1px solid var(--clr-border);">
+                    <div class="small text-muted text-uppercase fw-bold" style="font-size:0.68rem;letter-spacing:0.5px;">RESERVATION FEE</div>
+                    <div class="fw-bold text-dark fs-5 mt-1" id="adminHdmResFee">₱0.00</div>
+                  </div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                  <div class="p-3 rounded-3" style="background:#f8f9fb;border:1px solid var(--clr-border);">
+                    <div class="small text-muted text-uppercase fw-bold" style="font-size:0.68rem;letter-spacing:0.5px;">MONTHLY DOWNPAYMENT</div>
+                    <div class="fw-bold text-dark fs-5 mt-1" id="adminHdmMonthlyDp">₱0.00</div>
+                    <div class="small text-muted mt-1" id="adminHdmDpTerms" style="font-size:0.75rem;">—</div>
+                  </div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                  <div class="p-3 rounded-3" style="background:#f0fbf4;border:1px solid #bbf7d0;">
+                    <div class="small text-uppercase fw-bold" style="font-size:0.68rem;letter-spacing:0.5px;color:#15803d;">REQUIRED SALARY (20 YRS)</div>
+                    <div class="fw-bold text-dark fs-5 mt-1" id="adminHdmReqIncome20">₱0.00</div>
+                    <div class="small mt-1" id="adminHdmAmort20" style="font-size:0.75rem;color:#15803d;">Est. Amort: ₱0.00/mo</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Salary & Amortization Term Breakdown Table -->
+              <div class="card border-0 mb-3" style="background:#fcfcfd;border:1px solid var(--clr-border) !important;border-radius:10px;">
+                <div class="card-header bg-transparent py-2 px-3 border-bottom d-flex align-items-center gap-2">
+                  <i class="fas fa-coins text-warning"></i>
+                  <span class="fw-bold small text-uppercase" style="letter-spacing:0.5px;">Amortization &amp; Required Monthly Salary</span>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-sm sqh-table mb-0 text-center">
+                    <thead>
+                      <tr class="text-muted small">
+                        <th>Term</th>
+                        <th>Monthly Amortization</th>
+                        <th>Required Monthly Salary</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td class="fw-semibold">5 Years</td>
+                        <td id="adminHdmAmort5">₱0.00</td>
+                        <td class="fw-bold text-primary" id="adminHdmReq5">₱0.00</td>
+                      </tr>
+                      <tr>
+                        <td class="fw-semibold">10 Years</td>
+                        <td id="adminHdmAmort10">₱0.00</td>
+                        <td class="fw-bold text-primary" id="adminHdmReq10">₱0.00</td>
+                      </tr>
+                      <tr>
+                        <td class="fw-semibold">15 Years</td>
+                        <td id="adminHdmAmort15">₱0.00</td>
+                        <td class="fw-bold text-primary" id="adminHdmReq15">₱0.00</td>
+                      </tr>
+                      <tr>
+                        <td class="fw-semibold">20 Years</td>
+                        <td id="adminHdmAmort20Row">₱0.00</td>
+                        <td class="fw-bold text-success" id="adminHdmReq20Row">₱0.00</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Property Overview Grid -->
+              <div class="row g-2 mb-3">
+                <div class="col-6 col-md-3">
+                  <div class="p-2 border rounded-2" style="background:#fff;">
+                    <div class="text-muted small" style="font-size:0.68rem;text-transform:uppercase;font-weight:700;">MODEL TYPE</div>
+                    <div class="fw-semibold small" id="adminHdmModelType">—</div>
+                  </div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <div class="p-2 border rounded-2" style="background:#fff;">
+                    <div class="text-muted small" style="font-size:0.68rem;text-transform:uppercase;font-weight:700;">UNIT TYPE</div>
+                    <div class="fw-semibold small" id="adminHdmUnitType">—</div>
+                  </div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <div class="p-2 border rounded-2" style="background:#fff;">
+                    <div class="text-muted small" style="font-size:0.68rem;text-transform:uppercase;font-weight:700;">SUBDIVISION / PROJECT</div>
+                    <div class="fw-semibold small" id="adminHdmSubdiv">—</div>
+                  </div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <div class="p-2 border rounded-2" style="background:#fff;">
+                    <div class="text-muted small" style="font-size:0.68rem;text-transform:uppercase;font-weight:700;">BLOCK &amp; LOT / UNIT ID</div>
+                    <div class="fw-semibold small" id="adminHdmBlockLot">—</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Description -->
+              <div id="adminHdmDescWrap" class="d-none">
+                <div class="small text-muted text-uppercase fw-bold mb-1" style="font-size:0.7rem;letter-spacing:0.5px;">DESCRIPTION</div>
+                <div class="small p-3 rounded-2" style="background:#f8f9fb;border:1px solid var(--clr-border);white-space:pre-wrap;" id="adminHdmDesc"></div>
               </div>
             </div>
             <div class="modal-footer">

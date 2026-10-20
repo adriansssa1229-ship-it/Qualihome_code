@@ -817,6 +817,20 @@
           </div>
         </div>
 
+        <!-- Admin Note Section (Shown when Admin left a note upon approving details) -->
+        <div id="pvmAdminNoteWrap" class="pvm-admin-note-wrap mb-3 d-none">
+          <div class="pvm-admin-note-header">
+            <div class="pvm-admin-note-header-left">
+              <i class="fas fa-comment-dots pvm-admin-note-icon"></i>
+              <span class="pvm-admin-note-title">Note from Admin</span>
+            </div>
+            <span class="pvm-admin-note-badge">
+              <i class="fas fa-check-circle me-1"></i>Approved Details
+            </span>
+          </div>
+          <div class="pvm-admin-note-content" id="pvmAdminNoteText"></div>
+        </div>
+
         <div id="pvmPricingRequestHint" class="alert alert-info small d-none mb-3">
           <i class="fas fa-info-circle me-1"></i>
           Full computation details are available after an agent approves your request.
@@ -1924,10 +1938,19 @@
                 <label class="form-label">Financing</label>
                 <select id="loanFinancing" class="form-select sqh-form-control sqh-disabled-field buyer-icon-input" disabled>
                   <option value="">-- Select --</option>
-                  <option value="in-house">In House (Cash with ___ days)</option>
+                  <option value="in-house">In House</option>
+                  <option value="cash">Cash (with days)</option>
                   <option value="bank">Bank</option>
                   <option value="others">Others</option>
                 </select>
+                <div id="loanFinancingCashWrap" class="mt-1 d-none">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text" style="font-size:0.78rem;">Cash w/in</span>
+                    <input id="loanCashDays" class="form-control sqh-form-control buyer-icon-input" placeholder="e.g. 30" style="font-size:0.82rem;" readonly>
+                    <span class="input-group-text" style="font-size:0.78rem;">days</span>
+                  </div>
+                </div>
+                <input id="loanFinancingOther" class="form-control sqh-form-control mt-1 d-none buyer-icon-input" placeholder="Specify financing (e.g. Pag-IBIG)" readonly>
               </div>
 
               <div class="col-md-4">
@@ -1935,14 +1958,15 @@
                 <select id="loanDownpaymentTerm" class="form-select sqh-form-control sqh-disabled-field buyer-icon-input" disabled>
                   <option value="">-- Select --</option>
                   <option value="12">12 MOS</option>
-                  <option value="15">15 MOS</option>
+                  <option value="18">18 MOS</option>
                   <option value="24">24 MOS</option>
                   <option value="30">30 MOS</option>
                   <option value="others">Others</option>
                 </select>
+                <input id="loanDownpaymentTermOther" class="form-control sqh-form-control mt-1 d-none buyer-icon-input" placeholder="Specify DP term (e.g. 6 Months, 36 Months)" readonly>
               </div>
 
-              <div class="col-12">
+              <div class="col-md-4">
                 <label class="form-label">Loan Term</label>
                 <select id="loanTerm" class="form-select sqh-form-control sqh-disabled-field buyer-icon-input" disabled>
                   <option value="">-- Select --</option>
@@ -1950,8 +1974,10 @@
                   <option value="5">5 YRS</option>
                   <option value="10">10 YRS</option>
                   <option value="15">15 YRS</option>
+                  <option value="18">18 YRS</option>
                   <option value="others">Others</option>
                 </select>
+                <input id="loanTermOther" class="form-control sqh-form-control mt-1 d-none buyer-icon-input" placeholder="Specify loan term (e.g. 20 Years, 25 Years)" readonly>
               </div>
             </div>
             </div>
@@ -1995,6 +2021,9 @@
       </div>
 
       <div class="modal-footer">
+        <a href="javascript:void(0)" target="_blank" class="btn btn-outline-primary px-3 d-none" id="buyerPrintFormBtn" title="Print / Save as PDF">
+          <i class="fas fa-print me-1"></i> Print / Save as PDF
+        </a>
         <button type="button" class="btn btn-outline-blue px-4 d-none" id="buyerSubmitNewFormBtn">
           <i class="fas fa-rotate-right me-1"></i> Submit New Purchase Form
         </button>
@@ -2715,6 +2744,7 @@
                data-prop-added="{{ p.created_at.strftime('%b %d, %Y') if p.created_at else '' }}"
                data-has-request="{{ '1' if has_request else '0' }}"
                data-detail-request-status="{{ detail_status }}"
+               data-detail-request-note="{{ (detail_request_note_by_property.get(p.id, '') if detail_request_note_by_property is defined else '')|e }}"
                data-pricing-json="{{ pricing|tojson|forceescape }}"
                data-pricing-approved="{{ '1' if detail_status == 'approved' else '0' }}"
                data-prop-qualified="{{ '1' if is_eligible else '0' }}"
@@ -2844,6 +2874,7 @@
                data-prop-added="{{ p.created_at.strftime('%b %d, %Y') if p.created_at else '' }}"
                data-has-request="{{ '1' if has_request else '0' }}"
                data-detail-request-status="{{ detail_status }}"
+               data-detail-request-note="{{ (detail_request_note_by_property.get(p.id, '') if detail_request_note_by_property is defined else '')|e }}"
                data-pricing-json="{{ pricing|tojson|forceescape }}"
                data-pricing-approved="{{ '1' if detail_status == 'approved' else '0' }}"
                data-prop-qualified="{{ '1' if is_eligible else '0' }}"
@@ -3188,6 +3219,7 @@
                data-has-request="{{ '1' if has_request else '0' }}"
                data-visited="{{ '1' if p.id in visited_prop_ids else '0' }}"
                data-detail-request-status="{{ detail_status }}"
+               data-detail-request-note="{{ (detail_request_note_by_property.get(p.id, '') if detail_request_note_by_property is defined else '')|e }}"
                data-pricing-json="{{ pricing|tojson|forceescape }}"
                data-pricing-approved="{{ '1' if detail_status == 'approved' else '0' }}"
                data-prop-agent="{{ p.agent.full_name if p.agent else '' }}"
@@ -3479,6 +3511,7 @@
                data-prop-subdivision="{{ bp.subdivision.name if bp and bp.subdivision else '' }}"
                data-prop-images="{{ bp.images if bp else '' }}"
                data-prop-agent="{{ bp.agent.full_name if bp and bp.agent else '' }}"
+               data-detail-request-note="{{ (detail_request_note_by_property.get(bp.id, '') if (bp and detail_request_note_by_property is defined) else '')|e }}"
                data-pricing-json="{{ pricing|tojson|forceescape }}">
             <div class="prop-card-img-wrap">
               {% if bp_first_img %}

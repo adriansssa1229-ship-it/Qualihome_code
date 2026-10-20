@@ -2,10 +2,11 @@ import os
 import uuid
 import re
 import json
+import base64
 from collections import namedtuple
 from threading import Thread, Lock
 from datetime import datetime, timezone, date, time, timedelta
-from flask import Blueprint, render_template, redirect, url_for, request, jsonify, current_app, send_from_directory, make_response, session, g
+from flask import Blueprint, render_template, redirect, url_for, request, jsonify, current_app, send_from_directory, make_response, session, g, abort
 from flask_login import login_required, current_user
 from sqlalchemy.orm import selectinload, defer
 from werkzeug.security import generate_password_hash
@@ -973,6 +974,15 @@ def client_dashboard():
         int(r.property_id) for r in detail_requests
         if r.property_id and r.status == "approved"
     ])
+    detail_request_note_by_property = {}
+    for r in detail_requests:
+        note_text = (r.agent_note or "").strip()
+        if r.property_id and note_text:
+            detail_request_note_by_property[int(r.property_id)] = note_text
+    for h in detail_request_notifications:
+        note_text = (h.agent_note or "").strip()
+        if h.property_id and note_text and int(h.property_id) not in detail_request_note_by_property:
+            detail_request_note_by_property[int(h.property_id)] = note_text
     pricing_props_by_id = {int(prop.id): prop for prop in all_props if prop and prop.id}
     for sale in bought_sales:
         prop = sale.property_item
@@ -1111,6 +1121,7 @@ def client_dashboard():
         trip_status_notifications=trip_status_notifications,
         detail_request_status_by_property=detail_request_status_by_property,
         approved_detail_property_ids=approved_detail_property_ids,
+        detail_request_note_by_property=detail_request_note_by_property,
         property_pricing_map=property_pricing_map,
         agent_contact_map=agent_contact_map,
         buyer_bank_options=buyer_bank_options,
@@ -3860,6 +3871,15 @@ def client_property_detail_status(prop_id):
         property_id=prop_id
     ).first()
 
+    note = (req.agent_note or "").strip() if req else ""
+    if not note:
+        hist = (PropertyPricingDetailRequestHistory.query
+                .filter_by(client_id=current_user.id, property_id=prop_id)
+                .order_by(PropertyPricingDetailRequestHistory.id.desc())
+                .first())
+        if hist and hist.agent_note:
+            note = (hist.agent_note or "").strip()
+
     status = (req.status if req else "none").lower()
     is_approved = (status == "approved")
 
@@ -3867,7 +3887,8 @@ def client_property_detail_status(prop_id):
         ok=True,
         property_id=prop_id,
         status=status,
-        approved=is_approved
+        approved=is_approved,
+        note=note
     )
 
 
@@ -4033,6 +4054,109 @@ def agent_mark_trip_visited(trip_id):
     })
 
 
+def _build_fallback_purchase_payload(trip_row):
+    client = trip_row.client
+    profile = client.profile if client else None
+    prop_row = trip_row.property_item
+    assigned_agent_name = (
+        prop_row.agent.full_name
+        if prop_row and prop_row.agent and str(prop_row.agent.role or '').lower() == 'agent'
+        else ''
+    )
+    selling_price = float(prop_row.price or 0) if prop_row else 0.0
+    reservation_fee = float(getattr(prop_row, "reservation_fee", 0) or 0) if prop_row else 0.0
+    downpayment_rate = float(getattr(prop_row, "downpayment_rate", 0) or 0) if prop_row else 0.0
+    loanable_pct = float(getattr(prop_row, "loanable_percentage", 0) or 0) if prop_row else 0.0
+    downpayment = (selling_price * (downpayment_rate / 100.0)) if (selling_price > 0 and downpayment_rate > 0) else 0.0
+    loan_amount = (
+        (selling_price * (loanable_pct / 100.0))
+        if (selling_price > 0 and loanable_pct > 0)
+        else max(0.0, selling_price - downpayment)
+    )
+
+    def _fmt_php(value):
+        try:
+            n = float(value or 0)
+        except Exception:
+            n = 0.0
+        return f"PHP {n:,.2f}" if n > 0 else ""
+
+    return {
+        "pbLastName": client.last_name if client else "",
+        "pbFirstName": client.first_name if client else "",
+        "pbMiddleName": client.middle_name if client else "",
+        "pbEmailPersonal": client.email if client else "",
+        "pbMobile": (profile.contact_number if profile and profile.contact_number else (client.contact_number if client else "")),
+        "pbTelephone": profile.contact_no if profile and profile.contact_no else "",
+        "pbBirthDate": profile.birth_date.strftime("%Y-%m-%d") if profile and profile.birth_date else "",
+        "pbBirthPlace": profile.birthplace if profile and profile.birthplace else "",
+        "pbCivilStatus": profile.civil_status if profile and profile.civil_status else "",
+        "pbCitizenship": profile.citizenship if profile and profile.citizenship else "",
+        "pbGender": profile.gender if profile and profile.gender else "",
+        "pbTin": profile.tin_no if profile and profile.tin_no else "",
+        "pbGrossIncome": str(profile.gross_income) if profile and profile.gross_income is not None else "",
+        "pbDependentsChildren": str(profile.dependents) if profile and profile.dependents is not None else "",
+        "pbHomeStreet": profile.street if profile and profile.street else "",
+        "pbHomeNo": profile.blk if profile and profile.blk else "",
+        "pbHomeSubdivision": profile.subdivision_name if profile and profile.subdivision_name else "",
+        "pbHomeLocation": profile.address if profile and profile.address else "",
+        "pbEmploymentType": profile.employment_type if profile and profile.employment_type else "",
+        "loanUnitId": str(prop_row.unit_id) if prop_row and prop_row.unit_id is not None else "",
+        "loanSellingPrice": _fmt_php(selling_price),
+        "loanProcessingFee": "",
+        "loanAmount": _fmt_php(loan_amount),
+        "loanDownpayment": _fmt_php(downpayment),
+        "loanReservationFee": _fmt_php(reservation_fee or 20000),
+        "loanPromoDisc": "",
+        "loanOrPrNo": "",
+        "loanOrPrDate": "",
+        "loanBookingOfficer": assigned_agent_name,
+        "loanFinancing": "",
+        "loanCashDays": "",
+        "loanFinancingOther": "",
+        "loanDownpaymentTerm": "",
+        "loanDownpaymentTermOther": "",
+        "loanTerm": "",
+        "loanTermOther": "",
+        "buyerConsentAccepted": True,
+        "_fallback": True,
+    }
+
+
+def _parse_purchase_payload(raw):
+    try:
+        parsed = json.loads(raw or "{}")
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _merge_loan_details_into_trip(trip, loan_details, status=None):
+    current_payload = {}
+    if (trip.purchase_form_data or "").strip():
+        try:
+            parsed = json.loads(trip.purchase_form_data)
+            if isinstance(parsed, dict):
+                current_payload = parsed
+        except Exception:
+            current_payload = {}
+    else:
+        current_payload = _build_fallback_purchase_payload(trip)
+
+    if isinstance(loan_details, dict):
+        for k, v in loan_details.items():
+            if v is not None:
+                current_payload[k] = str(v).strip()
+
+    if status:
+        current_payload["_purchase_form_status"] = status
+
+    trip.purchase_form_data = json.dumps(current_payload, ensure_ascii=True)
+    trip.purchase_form_submitted = True
+    if not trip.purchase_form_submitted_at:
+        trip.purchase_form_submitted_at = datetime.now(timezone.utc)
+
+
 @main_bp.route("/agent/trip/<int:trip_id>/mark-bought", methods=["POST"])
 @login_required
 def agent_mark_trip_bought(trip_id):
@@ -4043,16 +4167,21 @@ def agent_mark_trip_bought(trip_id):
         return jsonify({"error": "Not found"}), 404
     if trip.property_item.agent_id != current_user.id and current_user.role != "admin":
         return jsonify({"error": "Forbidden"}), 403
-    if trip.status not in ("approved", "visited"):
+    if trip.status not in ("approved", "visited", "sold"):
         return jsonify({"error": "Only approved or visited trips can be marked as sold."}), 400
 
+    data = request.get_json(silent=True) or {}
     existing = PropertySale.query.filter_by(property_id=trip.property_id).first()
     if existing:
         if existing.trip_id == trip.id:
+            trip.status = "sold"
+            loan_details = data.get("loan_details")
+            if isinstance(loan_details, dict) and loan_details:
+                _merge_loan_details_into_trip(trip, loan_details, status="approved")
+            db.session.commit()
             return jsonify({"success": True, "trip_id": trip.id, "property_id": trip.property_id, "status": "sold"})
         return jsonify({"error": "This property has already been marked as sold."}), 409
 
-    data = request.get_json(silent=True) or {}
     note = (data.get("note") or "").strip()
     try:
         if data.get("selling_price") not in (None, ""):
@@ -4124,10 +4253,20 @@ def agent_mark_trip_bought(trip_id):
     )
 
     trip.property_item.status = "sold"
+    trip.status = "sold"
     if note:
         trip.agent_note = note
     else:
         trip.agent_note = "Property marked as sold by admin."
+
+    loan_details = data.get("loan_details")
+    if isinstance(loan_details, dict) and loan_details:
+        _merge_loan_details_into_trip(trip, loan_details, status="approved")
+    elif not trip.purchase_form_data:
+        trip.purchase_form_data = json.dumps(_build_fallback_purchase_payload(trip), ensure_ascii=True)
+        trip.purchase_form_submitted = True
+        if not trip.purchase_form_submitted_at:
+            trip.purchase_form_submitted_at = datetime.now(timezone.utc)
 
     if trip.property_item and trip.property_item.agent_id:
         db.session.add(AgentNotification(
@@ -4167,6 +4306,37 @@ def agent_mark_trip_bought(trip_id):
     })
 
 
+@main_bp.route("/admin/trip/<int:trip_id>/save-loan-details", methods=["POST"])
+@login_required
+def admin_save_loan_details(trip_id):
+    if current_user.role != "admin":
+        return jsonify(ok=False, error="Forbidden"), 403
+
+    trip = db.session.get(TrippingRequest, trip_id)
+    if not trip:
+        return jsonify(ok=False, error="Trip request not found."), 404
+
+    data = request.get_json(silent=True) or {}
+    loan_details = data.get("loan_details")
+    if not isinstance(loan_details, dict):
+        return jsonify(ok=False, error="Missing loan details."), 400
+
+    _merge_loan_details_into_trip(trip, loan_details, status=None)
+
+    sp_raw = loan_details.get("loanSellingPrice")
+    if sp_raw and trip.sale_record:
+        try:
+            sp_clean = float(re.sub(r"[^0-9.]", "", str(sp_raw)))
+            if sp_clean > 0:
+                trip.sale_record.selling_price = sp_clean
+        except Exception:
+            pass
+
+    log_activity("loan_details_save", f"Loan details saved for Trip #{trip.id}: {trip.client.full_name if trip.client else 'Client'}")
+    db.session.commit()
+    return jsonify(ok=True, trip_id=trip.id, purchase_form_data=trip.purchase_form_data)
+
+
 @main_bp.route("/admin/property/<int:prop_id>/purchase-list", methods=["GET"])
 @login_required
 def admin_property_purchase_list(prop_id):
@@ -4193,7 +4363,7 @@ def admin_property_purchase_list(prop_id):
              .order_by(TrippingRequest.created_at.desc())
              .all())
 
-    trips = [t for t in trips if (t.status or "").lower() == "visited" or t.sale_record is not None]
+    trips = [t for t in trips if (t.status or "").lower() in ("visited", "sold") or t.sale_record is not None or bool(t.purchase_form_submitted)]
 
     buyer_form_notifs = (AgentNotification.query
                          .filter_by(agent_id=current_user.id, event_type="buyer_form_submit")
@@ -4222,76 +4392,8 @@ def admin_property_purchase_list(prop_id):
     rows = []
     trip_backfilled = False
 
-    def _fallback_purchase_payload(trip_row):
-        client = trip_row.client
-        profile = client.profile if client else None
-        prop_row = trip_row.property_item
-        assigned_agent_name = (
-            prop_row.agent.full_name
-            if prop_row and prop_row.agent and str(prop_row.agent.role or '').lower() == 'agent'
-            else ''
-        )
-        selling_price = float(prop_row.price or 0) if prop_row else 0.0
-        reservation_fee = float(getattr(prop_row, "reservation_fee", 0) or 0) if prop_row else 0.0
-        downpayment_rate = float(getattr(prop_row, "downpayment_rate", 0) or 0) if prop_row else 0.0
-        loanable_pct = float(getattr(prop_row, "loanable_percentage", 0) or 0) if prop_row else 0.0
-        downpayment = (selling_price * (downpayment_rate / 100.0)) if (selling_price > 0 and downpayment_rate > 0) else 0.0
-        loan_amount = (
-            (selling_price * (loanable_pct / 100.0))
-            if (selling_price > 0 and loanable_pct > 0)
-            else max(0.0, selling_price - downpayment)
-        )
-
-        def _fmt_php(value):
-            try:
-                n = float(value or 0)
-            except Exception:
-                n = 0.0
-            return f"PHP {n:,.2f}" if n > 0 else ""
-
-        return {
-            "pbLastName": client.last_name if client else "",
-            "pbFirstName": client.first_name if client else "",
-            "pbMiddleName": client.middle_name if client else "",
-            "pbEmailPersonal": client.email if client else "",
-            "pbMobile": (profile.contact_number if profile and profile.contact_number else (client.contact_number if client else "")),
-            "pbTelephone": profile.contact_no if profile and profile.contact_no else "",
-            "pbBirthDate": profile.birth_date.strftime("%Y-%m-%d") if profile and profile.birth_date else "",
-            "pbBirthPlace": profile.birthplace if profile and profile.birthplace else "",
-            "pbCivilStatus": profile.civil_status if profile and profile.civil_status else "",
-            "pbCitizenship": profile.citizenship if profile and profile.citizenship else "",
-            "pbGender": profile.gender if profile and profile.gender else "",
-            "pbTin": profile.tin_no if profile and profile.tin_no else "",
-            "pbGrossIncome": str(profile.gross_income) if profile and profile.gross_income is not None else "",
-            "pbDependentsChildren": str(profile.dependents) if profile and profile.dependents is not None else "",
-            "pbHomeStreet": profile.street if profile and profile.street else "",
-            "pbHomeNo": profile.blk if profile and profile.blk else "",
-            "pbHomeSubdivision": profile.subdivision_name if profile and profile.subdivision_name else "",
-            "pbHomeLocation": profile.address if profile and profile.address else "",
-            "pbEmploymentType": profile.employment_type if profile and profile.employment_type else "",
-            "loanUnitId": str(prop_row.unit_id) if prop_row and prop_row.unit_id is not None else "",
-            "loanSellingPrice": _fmt_php(selling_price),
-            "loanProcessingFee": "",
-            "loanAmount": _fmt_php(loan_amount),
-            "loanDownpayment": _fmt_php(downpayment),
-            "loanReservationFee": _fmt_php(reservation_fee or 20000),
-            "loanPromoDisc": "",
-            "loanOrPrNo": "",
-            "loanOrPrDate": "",
-            "loanBookingOfficer": assigned_agent_name,
-            "loanFinancing": "",
-            "loanDownpaymentTerm": "",
-            "loanTerm": "",
-            "buyerConsentAccepted": True,
-            "_fallback": True,
-        }
-
-    def _parse_payload(raw):
-        try:
-            parsed = json.loads(raw or "{}")
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
+    _fallback_purchase_payload = _build_fallback_purchase_payload
+    _parse_payload = _parse_purchase_payload
 
     for trip in trips:
         payload_raw = trip.purchase_form_data or ""
@@ -4327,12 +4429,52 @@ def admin_property_purchase_list(prop_id):
 
         if has_submitted and not payload_raw:
             payload_raw = json.dumps(_fallback_purchase_payload(trip), ensure_ascii=True)
+            payload_obj = _parse_payload(payload_raw)
 
         can_view_form = bool((payload_raw or "").strip())
+
+        client_user = trip.client
+        client_prof = client_user.profile if client_user else None
+        client_phone = (
+            (client_prof.contact_number if client_prof and client_prof.contact_number else None) or
+            (client_prof.contact_no if client_prof and client_prof.contact_no else None) or
+            (client_user.contact_number if client_user and client_user.contact_number else None) or
+            ""
+        )
+        client_email = client_user.email if client_user and client_user.email else ""
+
+        loan_unit = str(payload_obj.get("loanUnitId") or (trip.property_item.unit_id if trip.property_item and trip.property_item.unit_id else "") or "").strip()
+        loan_price = str(payload_obj.get("loanSellingPrice") or "").strip()
+        if not loan_price:
+            if trip.sale_record and trip.sale_record.selling_price:
+                loan_price = f"PHP {float(trip.sale_record.selling_price):,.2f}"
+            elif trip.property_item and trip.property_item.price:
+                loan_price = f"PHP {float(trip.property_item.price):,.2f}"
+
+        selected_unit_price = ""
+        if loan_unit and loan_price:
+            selected_unit_price = f"Unit {loan_unit} • {loan_price}"
+        elif loan_unit:
+            selected_unit_price = f"Unit {loan_unit}"
+        elif loan_price:
+            selected_unit_price = loan_price
+        else:
+            selected_unit_price = "—"
+
+        submitted_date_short = submitted_at.strftime('%b %d, %Y') if submitted_at else "—"
+        visit_date_formatted = trip.preferred_date.strftime("%b %d, %Y") if trip.preferred_date else "—"
+
         rows.append({
             "trip_id": trip.id,
             "client_id": trip.client_id,
             "client_name": trip.client.full_name if trip.client else "Client",
+            "client_email": client_email,
+            "client_phone": client_phone,
+            "selected_unit": loan_unit or "—",
+            "selected_price": loan_price or "—",
+            "selected_unit_price": selected_unit_price,
+            "visit_date": visit_date_formatted,
+            "submitted_date": submitted_date_short,
             "assigned_agent_name": (
                 trip.property_item.agent.full_name
                 if trip.property_item and trip.property_item.agent and str(trip.property_item.agent.role or '').lower() == 'agent'
@@ -4344,9 +4486,9 @@ def admin_property_purchase_list(prop_id):
                 else None
             ),
             "esignature_url": url_for("main.admin_client_esignature", user_id=trip.client_id),
-            "preferred_date": trip.preferred_date.strftime("%b %d, %Y") if trip.preferred_date else "—",
+            "preferred_date": visit_date_formatted,
             "status": (trip.status or "pending").lower(),
-            "is_sold": bool(trip.sale_record),
+            "is_sold": bool(trip.sale_record) or (trip.status or "").lower() == "sold",
             "purchase_form_submitted": bool(has_submitted),
             "purchase_form_label": submitted_label,
             "purchase_form_submitted_at": submitted_at.isoformat() if submitted_at else None,
@@ -5097,4 +5239,257 @@ def agent_serve_client_document(user_id, doc_kind):
     resp.headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@main_bp.route("/trip/<int:trip_id>/buyer-form/print")
+@login_required
+def print_buyer_information_sheet(trip_id):
+    trip = (TrippingRequest.query
+            .filter_by(id=trip_id)
+            .options(
+                selectinload(TrippingRequest.client).selectinload(User.profile),
+                selectinload(TrippingRequest.property_item).selectinload(Property.agent),
+                selectinload(TrippingRequest.property_item).selectinload(Property.subdivision),
+                selectinload(TrippingRequest.sale_record)
+            )
+            .first())
+    if not trip:
+        abort(404)
+
+    # Permission check: accessible by client for their own trip, or admin/agent
+    if current_user.role not in ("admin", "agent") and trip.client_id != current_user.id:
+        abort(403)
+
+    client = trip.client
+    profile = client.profile if client else None
+    prop = trip.property_item
+    assigned_agent = prop.agent if prop and prop.agent else None
+
+    # Parse purchase_form_data JSON if available
+    payload = {}
+    if (trip.purchase_form_data or "").strip():
+        try:
+            parsed = json.loads(trip.purchase_form_data)
+            if isinstance(parsed, dict):
+                payload = parsed
+        except Exception:
+            payload = {}
+
+    # Extract or infer E-signature base64 data URL
+    esignature_base64 = None
+    if profile and profile.esignature_data:
+        try:
+            mimetype = profile.esignature_mimetype or "image/png"
+            b64 = base64.b64encode(profile.esignature_data).decode("ascii")
+            esignature_base64 = f"data:{mimetype};base64,{b64}"
+        except Exception:
+            esignature_base64 = None
+
+    def get_val(*keys, default=""):
+        for k in keys:
+            v = payload.get(k)
+            if v is not None and str(v).strip() and str(v).strip() != "—":
+                return str(v).strip()
+        return default
+
+    def fmt_date(d_val):
+        if not d_val:
+            return ""
+        if isinstance(d_val, (datetime, date)):
+            return d_val.strftime("%m/%d/%Y")
+        s = str(d_val).strip()
+        m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", s)
+        if m:
+            return f"{m.group(2)}/{m.group(3)}/{m.group(1)}"
+        return s
+
+    def fmt_php(val):
+        if val is None or val == "":
+            return ""
+        s = str(val).strip()
+        try:
+            cleaned = s.replace(",", "").replace("PHP", "").replace("₱", "").strip()
+            if cleaned:
+                n = float(cleaned)
+                return f"PHP {n:,.2f}"
+            return ""
+        except Exception:
+            return s
+
+    # Calculated or retrieved loan details
+    selling_price_raw = get_val("loanSellingPrice")
+    if not selling_price_raw and prop and prop.price:
+        selling_price_raw = fmt_php(prop.price)
+
+    loan_amount_raw = get_val("loanAmount")
+    downpayment_raw = get_val("loanDownpayment")
+    reservation_fee_raw = get_val("loanReservationFee", default="PHP 20,000.00")
+
+    # Date signed
+    raw_date = trip.purchase_form_submitted_at or trip.updated_at or trip.created_at
+    date_signed_formatted = fmt_date(raw_date)
+
+    b = {
+        # Section 1: Principal Buyer
+        "last_name": get_val("pbLastName", default=client.last_name if client else ""),
+        "first_name": get_val("pbFirstName", default=client.first_name if client else ""),
+        "middle_name": get_val("pbMiddleName", default=client.middle_name if client else ""),
+        "mother_maiden_name": get_val("pbMotherMaiden", "mother_maiden_name"),
+        "citizenship": get_val("pbCitizenship", default=profile.citizenship if profile else "Filipino"),
+        "dependents_yes_no": get_val("pbDependentsYesNo", default="yes" if (profile and profile.dependents and profile.dependents > 0) else "no").lower(),
+        "dependents_type": get_val("pbDependentsType").lower(),
+        "dependents_children": get_val("pbDependentsChildren", default=str(profile.dependents) if (profile and profile.dependents) else ""),
+        "dependents_parents": get_val("pbDependentsParents"),
+        "dependents_others": get_val("pbDependentsOthers"),
+        "birth_date": fmt_date(get_val("pbBirthDate", default=profile.birth_date if profile else "")),
+        "birth_place": get_val("pbBirthPlace", default=profile.birthplace if profile else ""),
+        "telephone": get_val("pbTelephone", default=profile.contact_no if profile else ""),
+        "mobile": get_val("pbMobile", default=profile.contact_number if profile and profile.contact_number else (client.contact_number if client else "")),
+        "email_personal": get_val("pbEmailPersonal", default=client.email if client else ""),
+        "email_work": get_val("pbEmailWork", default=profile.employer_email if profile else ""),
+        "sss_gsis_umid": get_val("pbUmid", default=profile.sss_gsis_umid if profile else ""),
+        "tin": get_val("pbTin", default=profile.tin_no if profile else ""),
+        "gender": get_val("pbGender", default=profile.gender if profile else "").lower(),
+        "civil_status": get_val("pbCivilStatus", default=profile.civil_status if profile else "").lower(),
+        "gross_income": fmt_php(get_val("pbGrossIncome", default=profile.gross_income if profile else "")),
+
+        # Social media
+        "facebook": get_val("auto_facebook_1", "pbFacebook", "social_facebook"),
+        "twitter": get_val("auto_twitter_1", "pbTwitter", default=profile.social_twitter_x if profile else ""),
+        "instagram": get_val("auto_instagram_1", "pbInstagram", default=profile.social_instagram if profile else ""),
+        "whatsapp": get_val("pbWhatsApp", default=profile.social_whatsapp if profile else ""),
+        "viber": get_val("pbViber", default=profile.social_viber if profile else ""),
+
+        # Section 2: Residence Address
+        "home_no": get_val("pbHomeNo", default=profile.blk if profile else ""),
+        "home_street": get_val("pbHomeStreet", default=profile.street if profile else ""),
+        "home_subdivision": get_val("pbHomeSubdivision", default=profile.subdivision_name if profile else ""),
+        "home_brgy": get_val("pbHomeBarangayName", "pbHomeBarangaySelect", default=profile.home_barangay_name if profile else ""),
+        "home_municipality": get_val("pbHomeCityName", "pbHomeCitySelect", default=profile.home_citymun_name if profile else ""),
+        "home_city": get_val("pbHomeCityName", "pbHomeCitySelect", default=profile.home_citymun_name if profile else ""),
+        "home_province": get_val("pbHomeProvinceName", "pbHomeProvinceSelect", default=profile.home_province_name if profile else ""),
+        "home_country": get_val("pbHomeCountry", default=profile.country if profile and profile.country else "Philippines"),
+        "home_zip": get_val("pbHomeZip", default=profile.zip_code if profile else ""),
+
+        # Section 3: Employment
+        "employment_type": get_val("pbEmploymentType", default=profile.employment_type if profile else "").lower(),
+        "employer_name": get_val("auto_employer_business_name_1", "pbEmployerBusinessName", default=profile.employer_name if profile else ""),
+        "employer_phone": get_val("pbEmployerTelephone", default=profile.employer_phone if profile else ""),
+        "employer_email": get_val("auto_e_mail_address_1", "pbEmployerEmail", default=profile.employer_email if profile else ""),
+        "emp_no": get_val("pbEmpAddressNo"),
+        "emp_street": get_val("pbEmpStreet", default=profile.employer_business_address if profile else ""),
+        "emp_brgy": get_val("pbEmpBarangayName", "pbEmpBarangaySelect", default=profile.employer_barangay_name if profile else ""),
+        "emp_municipality": get_val("pbEmpCityName", "pbEmpCitySelect", default=profile.employer_citymun_name if profile else ""),
+        "emp_city": get_val("pbEmpCityName", "pbEmpCitySelect", default=profile.employer_citymun_name if profile else ""),
+        "emp_province": get_val("pbEmpProvinceName", "pbEmpProvinceSelect", default=profile.employer_province_name if profile else ""),
+        "emp_country": get_val("pbEmpCountry", default="Philippines"),
+        "emp_zip": get_val("auto_zip_code_1", "pbEmpZip", default=profile.zip_code if profile else ""),
+        "occupation": get_val("pbOccupationProfession"),
+        "position": get_val("pbOccupationalPosition"),
+        "tenure": get_val("auto_tenure_1", "pbTenure", default=str(profile.tenure_months) if profile and profile.tenure_months else ""),
+        "preferred_mailing": get_val("pbMailPref", default="residence").lower(),
+
+        # Mailing Address
+        "mail_no": get_val("pbMailNo"),
+        "mail_street": get_val("pbMailStreet"),
+        "mail_subdivision": get_val("pbMailSubdivision"),
+        "mail_brgy": get_val("pbMailBarangayName", "pbMailBarangaySelect"),
+        "mail_municipality": get_val("pbMailCityName", "pbMailCitySelect"),
+        "mail_city": get_val("pbMailCityName", "pbMailCitySelect"),
+        "mail_province": get_val("pbMailProvinceName", "pbMailProvinceSelect"),
+        "mail_country": get_val("pbMailCountry", default="Philippines"),
+        "mail_zip": get_val("pbMailZip"),
+
+        # Section 4: Spouse
+        "has_spouse": get_val("pbHasSpouse", default="no").lower() == "yes",
+        "sp_last_name": get_val("spLastName"),
+        "sp_first_name": get_val("spFirstName"),
+        "sp_middle_name": get_val("spMiddleName"),
+        "sp_birth_date": fmt_date(get_val("spBirthDate")),
+        "sp_birth_place": get_val("spBirthPlace"),
+        "sp_citizenship": get_val("spCitizenship"),
+        "sp_mobile": get_val("spMobile"),
+        "sp_telephone": get_val("spTelephone"),
+        "sp_email": get_val("spEmail"),
+        "sp_tin": get_val("spTin"),
+        "sp_umid": get_val("spUmid"),
+        "sp_gross_income": fmt_php(get_val("spGrossIncome")),
+        "sp_emp_type": get_val("spEmploymentType").lower(),
+        "sp_emp_name": get_val("spEmpBusinessName"),
+        "sp_emp_phone": get_val("spEmpTelephone"),
+        "sp_emp_email": get_val("spEmpEmail"),
+        "sp_emp_no": get_val("spEmpAddressNo"),
+        "sp_emp_street": get_val("spEmpStreet"),
+        "sp_emp_brgy": get_val("spEmpBarangayName", "spEmpBarangaySelect"),
+        "sp_emp_municipality": get_val("spEmpCityName", "spEmpCitySelect"),
+        "sp_emp_city": get_val("spEmpCityName", "spEmpCitySelect"),
+        "sp_emp_province": get_val("spEmpProvinceName", "spEmpProvinceSelect"),
+        "sp_emp_country": get_val("spEmpCountry", default="Philippines"),
+        "sp_emp_zip": get_val("spEmpZip"),
+        "sp_occupation": get_val("spEmpOccupationProfession"),
+        "sp_position": get_val("spEmpOccupationalPosition"),
+        "sp_tenure": get_val("spEmpTenure"),
+
+        # Section 5: Beneficiaries
+        "ben1_last": get_val("beneficiary1LastName"),
+        "ben1_first": get_val("beneficiary1FirstName"),
+        "ben1_mid": get_val("beneficiary1MiddleName"),
+        "ben1_bday": fmt_date(get_val("beneficiary1Birthday")),
+        "ben1_rel": get_val("beneficiary1Relationship"),
+
+        "ben2_last": get_val("beneficiary2LastName"),
+        "ben2_first": get_val("beneficiary2FirstName"),
+        "ben2_mid": get_val("beneficiary2MiddleName"),
+        "ben2_bday": fmt_date(get_val("beneficiary2Birthday")),
+        "ben2_rel": get_val("beneficiary2Relationship"),
+
+        # Section 6: Buyer's Profile
+        "buyer_rank": get_val("buyerRank").lower(),
+        "buyer_funds": get_val("buyerFunds").lower(),
+        "home_ownership": get_val("homeOwnership").lower(),
+        "length_of_stay": get_val("pbLengthOfStay"),
+        "household_count": get_val("householdCount"),
+        "buying_purpose": get_val("buyingPurpose").lower(),
+        "project_source": get_val("projectSource").lower(),
+        "has_bank_account": get_val("hasBankAccount", default="no").lower() == "yes",
+        "bank_name": get_val("pbBankName", "auto_with_which_bank_s_1", "auto_with_which_bank_s_2"),
+        "bank_account_type": get_val("bankAccountType").lower(),
+
+        # Section 7: Loan Details
+        "unit_id": get_val("loanUnitId", default=str(prop.unit_id) if prop and prop.unit_id else ""),
+        "selling_price": selling_price_raw,
+        "processing_fee": fmt_php(get_val("loanProcessingFee")),
+        "loan_amount": fmt_php(loan_amount_raw),
+        "downpayment": fmt_php(downpayment_raw),
+        "reservation_fee": fmt_php(reservation_fee_raw),
+        "promo_disc": fmt_php(get_val("loanPromoDisc")),
+        "or_pr_no": get_val("loanOrPrNo"),
+        "or_pr_date": fmt_date(get_val("loanOrPrDate")),
+        "booking_officer": get_val("loanBookingOfficer", default=assigned_agent.full_name if assigned_agent else ""),
+        "loan_financing": get_val("loanFinancing").lower(),
+        "loan_cash_days": get_val("loanCashDays", "loan_cash_days"),
+        "loan_financing_other": get_val("loanFinancingOther", "loan_financing_other", "loan_financing_custom"),
+        "downpayment_term": get_val("loanDownpaymentTerm"),
+        "downpayment_term_other": get_val("loanDownpaymentTermOther", "loan_downpayment_term_other", "loan_dp_term_custom"),
+        "loan_term": get_val("loanTerm"),
+        "loan_term_other": get_val("loanTermOther", "loan_term_other", "loan_term_custom"),
+
+        # Section 8 & 9: Agent & Signatures
+        "group_name": "ANNREGAR REALTY",
+        "division_manager": "ANGELINE R. GARDIOLA",
+        "branch_manager": "",
+        "unit_manager": "",
+        "assigned_agent_name": assigned_agent.full_name if assigned_agent else (get_val("loanBookingOfficer") or "—"),
+        "buyer_full_name": f"{client.first_name} {client.middle_name or ''} {client.last_name}".strip().upper() if client else "—",
+        "date_signed": date_signed_formatted,
+        "esignature_base64": esignature_base64,
+    }
+
+    return render_template(
+        "client/buyer_information_sheet_print.html",
+        trip=trip,
+        prop=prop,
+        client=client,
+        b=b
+    )
 

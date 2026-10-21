@@ -417,15 +417,15 @@
               </div>
               <div style="margin-top: 1px;">
                 <span class="lbl">If yes, :</span>
-                <span class="chk-inline" style="margin-left: 4px;"><span class="chk">{{ '✓' if ('child' in b.dependents_type or b.dependents_children) else '' }}</span> Child/ren</span>
-                <span class="chk-inline"><span class="chk">{{ '✓' if ('parent' in b.dependents_type or b.dependents_parents) else '' }}</span> Parents</span>
-                <span class="chk-inline"><span class="chk">{{ '✓' if ('other' in b.dependents_type or b.dependents_others) else '' }}</span> Others: <span class="val">{{ b.dependents_others }}</span></span>
+                <span class="chk-inline" style="margin-left: 4px;"><span class="chk">{{ '✓' if b.dep_children else '' }}</span> Child/ren</span>
+                <span class="chk-inline"><span class="chk">{{ '✓' if b.dep_parents else '' }}</span> Parents</span>
+                <span class="chk-inline"><span class="chk">{{ '✓' if b.dep_others else '' }}</span> Others: <span class="val">{{ b.dep_others_specify or '' }}</span></span>
               </div>
               <div style="margin-top: 1px;">
                 <span class="lbl"># of dependents :</span>
-                Child/ren: <span class="val-line">{{ b.dependents_children or '—' }}</span>
-                Parents: <span class="val-line">{{ b.dependents_parents or '—' }}</span>
-                Others: <span class="val-line">{{ b.dependents_others or '—' }}</span>
+                Child/ren: <span class="val-line">{{ b.dep_children_count or '—' }}</span>
+                Parents: <span class="val-line">{{ b.dep_parents_count or '—' }}</span>
+                Others: <span class="val-line">{{ b.dep_others_count or '—' }}</span>
               </div>
             </div>
           </td>
@@ -633,9 +633,9 @@
           <td colspan="4">
             <div>
               <span class="lbl">Preferred Billing/Mailing Address:</span>
-              <span class="chk-inline" style="margin-left: 8px;"><span class="chk">{{ '✓' if b.preferred_mailing in ['residence', 'home'] else '' }}</span> Residence</span>
-              <span class="chk-inline"><span class="chk">{{ '✓' if b.preferred_mailing == 'office' else '' }}</span> Office</span>
-              <span class="chk-inline"><span class="chk">{{ '✓' if b.preferred_mailing not in ['residence', 'home', 'office'] and b.preferred_mailing else '' }}</span> Others (pls specify) : <span class="val">{{ b.preferred_mailing if b.preferred_mailing not in ['residence', 'home', 'office'] else '' }}</span></span>
+              <span class="chk-inline" style="margin-left: 8px;"><span class="chk">{{ '✓' if b.mail_pref_type in ['residence', 'home'] else '' }}</span> Residence</span>
+              <span class="chk-inline"><span class="chk">{{ '✓' if b.mail_pref_type == 'office' else '' }}</span> Office</span>
+              <span class="chk-inline"><span class="chk">{{ '✓' if b.mail_pref_type == 'others' or (b.mail_pref_other and b.mail_pref_type not in ['residence', 'home', 'office']) else '' }}</span> Others (pls specify) : <span class="val">{{ b.mail_pref_other or '' }}</span></span>
             </div>
             <div style="margin-top: 1px;">
               <span><span class="lbl">No.</span> <span class="val">{{ b.mail_no or '—' }}</span></span>
@@ -774,28 +774,28 @@
               </tr>
               <tr>
                 <td style="border: none; padding: 1.2px 3px;">Business Owner</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_rank == 'business-owner' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.sp_emp_type == 'self-employed' else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_pb_business_owner else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_sp_business_owner else '' }}</span></td>
               </tr>
               <tr>
                 <td style="border: none; padding: 1.2px 3px;">Top Executive</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_rank == 'top-executive' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_pb_top_exec else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_sp_top_exec else '' }}</span></td>
               </tr>
               <tr>
                 <td style="border: none; padding: 1.2px 3px;">Manager/Supervisor</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_rank == 'manager-supervisor' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_pb_manager else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_sp_manager else '' }}</span></td>
               </tr>
               <tr>
                 <td style="border: none; padding: 1.2px 3px;">Rank & File</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_rank == 'rank-and-file' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_pb_rank_file else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_sp_rank_file else '' }}</span></td>
               </tr>
               <tr>
-                <td style="border: none; padding: 1.2px 3px;">Others</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_rank == 'others' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; padding: 1.2px 3px;">Others{% if b.occ_other_specify %}: <span class="val" style="font-size:6.8pt;">{{ b.occ_other_specify }}</span>{% endif %}</td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_pb_others else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.occ_sp_others else '' }}</span></td>
               </tr>
             </table>
           </td>
@@ -810,28 +810,28 @@
               </tr>
               <tr>
                 <td style="border: none; padding: 1.2px 3px;">Employment</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_funds == 'employment' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_pb_employment else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_sp_employment else '' }}</span></td>
               </tr>
               <tr>
                 <td style="border: none; padding: 1.2px 3px;">Business</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_funds == 'business' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_pb_business else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_sp_business else '' }}</span></td>
               </tr>
               <tr>
                 <td style="border: none; padding: 1.2px 3px;">Inheritance</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_funds == 'inheritance' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_pb_inheritance else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_sp_inheritance else '' }}</span></td>
               </tr>
               <tr>
                 <td style="border: none; padding: 1.2px 3px;">Remittance</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_funds == 'remittance' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_pb_remittance else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_sp_remittance else '' }}</span></td>
               </tr>
               <tr>
-                <td style="border: none; padding: 1.2px 3px;">Others</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.buyer_funds == 'others' else '' }}</span></td>
-                <td style="border: none; text-align: center;"><span class="chk"></span></td>
+                <td style="border: none; padding: 1.2px 3px;">Others{% if b.fund_other_specify %}: <span class="val" style="font-size:6.8pt;">{{ b.fund_other_specify }}</span>{% endif %}</td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_pb_others else '' }}</span></td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.fund_sp_others else '' }}</span></td>
               </tr>
             </table>
           </td>
@@ -855,8 +855,8 @@
                 <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.home_ownership == 'owned-by-parents' else '' }}</span></td>
               </tr>
               <tr>
-                <td style="border: none; padding: 1.2px 3px;">Others (pls specify)</td>
-                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.home_ownership == 'others' else '' }}</span></td>
+                <td style="border: none; padding: 1.2px 3px;">Others (pls specify){% if b.home_ownership_other %}: <span class="val" style="font-size:6.8pt;">{{ b.home_ownership_other }}</span>{% endif %}</td>
+                <td style="border: none; text-align: center;"><span class="chk">{{ '✓' if b.home_ownership == 'others' or b.home_ownership_other else '' }}</span></td>
               </tr>
               <tr>
                 <td colspan="2" style="border: none; padding: 1.2px 3px;">
@@ -941,7 +941,7 @@
               <span class="chk-inline"><span class="chk">{{ '✓' if b.project_source == 'referral' else '' }}</span> Referral</span>
               <span class="chk-inline"><span class="chk">{{ '✓' if b.project_source == 'billboard-signage' else '' }}</span> Billboard/Directional signage</span>
               <span class="chk-inline"><span class="chk">{{ '✓' if b.project_source == 'exhibit-booth' else '' }}</span> Exhibit/booth</span>
-              <span>Other sources : <span class="val">{{ b.project_source if b.project_source == 'other-sources' else '' }}</span></span>
+              <span class="chk-inline"><span class="chk">{{ '✓' if b.project_source in ['other-sources', 'others'] or b.project_source_other else '' }}</span> Other sources : <span class="val">{{ b.project_source_other or (b.project_source if b.project_source not in ['word-of-mouth', 'broker-sales-agents', 'flyer-leaflet', 'internet-webpage', 'referral', 'billboard-signage', 'exhibit-booth', 'other-sources', 'others'] else '') }}</span></span>
             </div>
           </td>
         </tr>

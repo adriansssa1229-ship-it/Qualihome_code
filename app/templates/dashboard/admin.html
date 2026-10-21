@@ -1267,7 +1267,7 @@
             </li>
             <li class="nav-item" role="presentation">
               <button class="nav-link" id="tab-purchase-visited" data-bs-toggle="tab" data-bs-target="#pane-purchase-visited" type="button" role="tab" aria-controls="pane-purchase-visited" aria-selected="false">
-                <i class="fas fa-walking me-1"></i>Visited Leads (Pending Submission)
+                <i class="fas fa-fire text-danger me-1"></i>Visitors (Hot Leads)
                 <span class="badge bg-secondary rounded-pill ms-2" id="purchaseVisitedCountBadge">0</span>
               </button>
             </li>
@@ -1298,7 +1298,7 @@
               </div>
             </div>
 
-            <!-- Tab 2: Visited Leads (Pending Submission) -->
+            <!-- Tab 2: Interested Visitors (Hot Leads) -->
             <div class="tab-pane fade" id="pane-purchase-visited" role="tabpanel" aria-labelledby="tab-purchase-visited">
               <div class="table-responsive">
                 <table class="table sqh-table mb-0" id="purchaseVisitedTable">
@@ -1307,7 +1307,7 @@
                       <th>Client Name</th>
                       <th>Visit Date</th>
                       <th>Contact Number / Email</th>
-                      <th>Follow-up Status</th>
+                      <th>Assigned Agent</th>
                       <th class="text-end">Actions</th>
                     </tr>
                   </thead>
@@ -1315,9 +1315,9 @@
                 </table>
               </div>
               <div id="purchaseVisitedEmpty" class="text-center text-muted py-5 d-none">
-                <i class="fas fa-user-check fa-2x mb-2 d-block text-success" style="opacity:0.75;"></i>
-                <span class="fw-semibold d-block mb-1">No pending leads awaiting submission.</span>
-                <span class="small">All visited clients for this model have already submitted their Buyer Information Sheet.</span>
+                <i class="fas fa-fire fa-2x mb-2 d-block text-danger" style="opacity:0.75;"></i>
+                <span class="fw-semibold d-block mb-1">No hot leads for follow-up yet.</span>
+                <span class="small">Clients who finish their site tour for this house model will appear here for post-visit follow-up and reservation.</span>
               </div>
             </div>
           </div>
@@ -1406,18 +1406,38 @@
                       <option value="no">No</option>
                     </select>
                   </div>
-                  <div class="col-md-4">
-                    <label class="form-label">If yes</label>
-                    <select id="pbDependentsType" class="form-select buyer-icon-input">
-                      <option value="">-- Select --</option>
-                      <option value="children">Children</option>
-                      <option value="parents">Parents</option>
-                      <option value="others">Others</option>
-                    </select>
+                  <div class="col-md-8" id="depTypeCheckboxesWrap">
+                    <label class="form-label">If yes, select category/ies:</label>
+                    <div class="d-flex flex-wrap gap-4 align-items-center p-2 rounded border bg-light">
+                      <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="depTypeChildren" name="depTypeChildren">
+                        <label class="form-check-label fw-semibold" for="depTypeChildren">Children</label>
+                      </div>
+                      <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="depTypeParents" name="depTypeParents">
+                        <label class="form-check-label fw-semibold" for="depTypeParents">Parents</label>
+                      </div>
+                      <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="depTypeOthers" name="depTypeOthers">
+                        <label class="form-check-label fw-semibold" for="depTypeOthers">Others</label>
+                      </div>
+                    </div>
+                    <div id="depTypeOthersSpecifyWrap" class="mt-2 d-none">
+                      <input type="text" id="depTypeOthersSpecify" class="form-control buyer-icon-input" placeholder="Specify others (e.g. Siblings, Relatives)">
+                    </div>
                   </div>
-                  <div class="col-md-4"><label class="form-label">No. of Dependents - Children</label><input id="pbDependentsChildren" type="number" min="0" class="form-control buyer-icon-input"></div>
-                  <div class="col-md-4"><label class="form-label">No. of Dependents - Parents</label><input id="pbDependentsParents" type="number" min="0" class="form-control buyer-icon-input"></div>
-                  <div class="col-md-4"><label class="form-label">No. of Dependents - Others</label><input id="pbDependentsOthers" type="number" min="0" class="form-control buyer-icon-input"></div>
+                  <div class="col-md-4" id="depCountChildrenWrap">
+                    <label class="form-label">No. of Children:</label>
+                    <input id="pbDependentsChildren" type="number" min="0" class="form-control buyer-icon-input" placeholder="0">
+                  </div>
+                  <div class="col-md-4" id="depCountParentsWrap">
+                    <label class="form-label">No. of Parents:</label>
+                    <input id="pbDependentsParents" type="number" min="0" class="form-control buyer-icon-input" placeholder="0">
+                  </div>
+                  <div class="col-md-4" id="depCountOthersWrap">
+                    <label class="form-label">No. of Others:</label>
+                    <input id="pbDependentsOthers" type="number" min="0" class="form-control buyer-icon-input" placeholder="0">
+                  </div>
                   <div class="col-md-4"><label class="form-label">Telephone No.</label><input id="pbTelephone" class="form-control buyer-icon-input" inputmode="numeric" maxlength="12" placeholder="0212345678"></div>
                   <div class="col-md-4"><label class="form-label">Mobile No.</label><input id="pbMobile" class="form-control buyer-icon-input" inputmode="numeric" maxlength="11" placeholder="09171234567"></div>
                   <div class="col-md-4"><label class="form-label">E-mail (Personal)</label><input id="pbEmailPersonal" class="form-control buyer-icon-input" type="email"></div>
@@ -1543,10 +1563,13 @@
                     <label class="form-label">Address Source</label>
                     <select id="pbMailPref" class="form-select buyer-icon-input">
                       <option value="">-- Select --</option>
-                      <option value="home">Home</option>
                       <option value="residence">Residence</option>
                       <option value="office">Office</option>
+                      <option value="others">Others (pls specify)</option>
                     </select>
+                    <div id="pbMailPrefOtherWrap" class="mt-2 d-none">
+                      <input type="text" id="pbMailPrefOther" class="form-control buyer-icon-input" placeholder="Specify billing address description (e.g. Relative address, P.O. Box)">
+                    </div>
                   </div>
                   <div class="col-md-6"><label class="form-label">No.</label><input id="pbMailNo" class="form-control buyer-icon-input" inputmode="numeric" maxlength="6" placeholder="e.g. 123"></div>
                   <div class="col-md-6"><label class="form-label">Street</label><input id="pbMailStreet" class="form-control buyer-icon-input"></div>
@@ -1748,28 +1771,98 @@
                   </div>
                 </div>
                 <div class="row g-3 mb-4">
+                  <!-- Occupation Rank Grid -->
                   <div class="col-md-6">
-                    <label class="form-label">Occupation Rank (Principal Buyer / Spouse)</label>
-                    <select id="buyerRank" class="form-select buyer-icon-input">
-                      <option value="">-- Select --</option>
-                      <option value="business-owner">Business Owner</option>
-                      <option value="top-executive">Top Executive</option>
-                      <option value="manager-supervisor">Manager/Supervisor</option>
-                      <option value="rank-and-file">Rank &amp; File</option>
-                      <option value="others">Others</option>
-                    </select>
+                    <label class="form-label fw-bold"><i class="fas fa-briefcase me-1 text-primary"></i>Occupation Rank</label>
+                    <div class="table-responsive border rounded bg-white p-2">
+                      <table class="table table-sm table-bordered align-middle mb-1" style="font-size:0.82rem;">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Occupation Rank</th>
+                            <th class="text-center" style="width: 105px;">Principal Buyer</th>
+                            <th class="text-center" style="width: 105px;">Spouse</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>Business Owner</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_business_owner" name="occ_pb_business_owner"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_business_owner" name="occ_sp_business_owner"></td>
+                          </tr>
+                          <tr>
+                            <td>Top Executive</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_top_exec" name="occ_pb_top_exec"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_top_exec" name="occ_sp_top_exec"></td>
+                          </tr>
+                          <tr>
+                            <td>Manager/Supervisor</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_manager" name="occ_pb_manager"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_manager" name="occ_sp_manager"></td>
+                          </tr>
+                          <tr>
+                            <td>Rank &amp; File</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_rank_file" name="occ_pb_rank_file"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_rank_file" name="occ_sp_rank_file"></td>
+                          </tr>
+                          <tr>
+                            <td>Others</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_others" name="occ_pb_others"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_others" name="occ_sp_others"></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div id="occRankOtherWrap" class="mt-2 d-none">
+                        <input type="text" id="occRankOtherSpecify" class="form-control form-control-sm buyer-icon-input" placeholder="Specify rank (e.g. Freelancer, Consultant)">
+                      </div>
+                    </div>
                   </div>
+
+                  <!-- Source of Funds Grid -->
                   <div class="col-md-6">
-                    <label class="form-label">Source of Funds (Principal Buyer / Spouse)</label>
-                    <select id="buyerFunds" class="form-select buyer-icon-input">
-                      <option value="">-- Select --</option>
-                      <option value="employment">Employment</option>
-                      <option value="business">Business</option>
-                      <option value="inheritance">Inheritance</option>
-                      <option value="remittance">Remittance</option>
-                      <option value="others">Others</option>
-                    </select>
+                    <label class="form-label fw-bold"><i class="fas fa-coins me-1 text-primary"></i>Source of Funds</label>
+                    <div class="table-responsive border rounded bg-white p-2">
+                      <table class="table table-sm table-bordered align-middle mb-1" style="font-size:0.82rem;">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Source of Funds</th>
+                            <th class="text-center" style="width: 105px;">Principal Buyer</th>
+                            <th class="text-center" style="width: 105px;">Spouse</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>Employment</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_employment" name="fund_pb_employment"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_employment" name="fund_sp_employment"></td>
+                          </tr>
+                          <tr>
+                            <td>Business</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_business" name="fund_pb_business"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_business" name="fund_sp_business"></td>
+                          </tr>
+                          <tr>
+                            <td>Inheritance</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_inheritance" name="fund_pb_inheritance"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_inheritance" name="fund_sp_inheritance"></td>
+                          </tr>
+                          <tr>
+                            <td>Remittance</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_remittance" name="fund_pb_remittance"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_remittance" name="fund_sp_remittance"></td>
+                          </tr>
+                          <tr>
+                            <td>Others</td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_others" name="fund_pb_others"></td>
+                            <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_others" name="fund_sp_others"></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div id="fundOtherWrap" class="mt-2 d-none">
+                        <input type="text" id="fundOtherSpecify" class="form-control form-control-sm buyer-icon-input" placeholder="Specify source (e.g. Investments, Pension)">
+                      </div>
+                    </div>
                   </div>
+
                   <div class="col-md-6">
                     <label class="form-label">Current Home Ownership</label>
                     <select id="homeOwnership" class="form-select buyer-icon-input">
@@ -1777,8 +1870,11 @@
                       <option value="owned">Owned</option>
                       <option value="rented">Rented</option>
                       <option value="owned-by-parents">Owned by Parents</option>
-                      <option value="others">Others</option>
+                      <option value="others">Others (pls specify)</option>
                     </select>
+                    <div id="homeOwnershipOtherWrap" class="mt-2 d-none">
+                      <input type="text" id="homeOwnershipOther" class="form-control buyer-icon-input" placeholder="Please specify home ownership (e.g. Living with in-laws, Company-provided)">
+                    </div>
                   </div>
                   <div class="col-md-6"><label class="form-label">Length of Stay</label><input id="pbLengthOfStay" class="form-control buyer-icon-input" type="text" inputmode="numeric" maxlength="3" placeholder="e.g. 5"></div>
                   <div class="col-md-6">
@@ -1816,6 +1912,9 @@
                       <option value="exhibit-booth">Exhibit/Booth</option>
                       <option value="other-sources">Other Sources</option>
                     </select>
+                    <div id="projectSourceOtherWrap" class="mt-2 d-none">
+                      <input type="text" id="projectSourceOther" class="form-control buyer-icon-input" placeholder="Specify other source (e.g. Facebook Ads, TikTok, Event booth)">
+                    </div>
                   </div>
                   <div class="col-md-6">
                     <label class="form-label">Do you have an existing Bank Account</label>
@@ -2973,11 +3072,12 @@
                 </td>
                 <td data-label="Assigned Agent" style="min-width:180px;">
                   {% if row_status == 'pending' %}
-                    <input type="hidden" id="tripAssignAgent-{{ t.id }}" value="">
+                    {% set default_agent = av_agents[0] if (av_agents and av_agents|length > 0) else none %}
+                    <input type="hidden" id="tripAssignAgent-{{ t.id }}" value="{{ default_agent.id if default_agent else '' }}">
                     <button type="button" class="btn btn-sm btn-outline-blue admin-trip-open-assign-btn" data-trip-id="{{ t.id }}">
-                      <i class="fas fa-calendar-alt me-1"></i>Choose Agent
+                      <i class="fas fa-calendar-alt me-1"></i>{{ 'Change Agent' if default_agent else 'Choose Agent' }}
                     </button>
-                    <div id="tripAssignAgentLabel-{{ t.id }}" class="fw-semibold text-dark small mt-1"></div>
+                    <div id="tripAssignAgentLabel-{{ t.id }}" class="fw-semibold text-dark small mt-1">{{ default_agent.name if default_agent else '' }}</div>
                   {% else %}
                     <span class="fw-semibold text-dark small">{{ t.property_item.agent.full_name if row_status in ['approved', 'visited', 'sold'] and t.property_item and t.property_item.agent else '—' }}</span>
                   {% endif %}
@@ -2999,11 +3099,17 @@
                   <input type="hidden" id="tripNote-{{ t.id }}" value="{{ t.agent_note or '' }}">
                   {% if row_status == 'pending' %}
                   <div class="d-flex gap-1 flex-wrap">
-                    <button type="button" class="btn btn-sm btn-lime admin-trip-approve-btn" data-trip-id="{{ t.id }}" title="Approve" disabled>
+                    <button type="button" class="btn btn-sm btn-lime admin-trip-approve-btn" data-trip-id="{{ t.id }}" title="Approve">
                       <i class="fas fa-check"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-crimson admin-trip-reject-btn" data-trip-id="{{ t.id }}" title="Reject">
                       <i class="fas fa-times"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
+                      <i class="fas fa-user"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
+                      <i class="fas fa-home"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-crimson admin-trip-delete-btn" data-trip-id="{{ t.id }}" title="Delete">
                       <i class="fas fa-trash"></i>
@@ -3014,6 +3120,12 @@
                     <button type="button" class="btn btn-sm btn-outline-blue admin-trip-visit-btn" data-trip-id="{{ t.id }}" title="Mark as Visited">
                       <i class="fas fa-map-marked-alt"></i>
                     </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
+                      <i class="fas fa-user"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
+                      <i class="fas fa-home"></i>
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="{{ t.id }}" title="View Trip Request">
                       <i class="fas fa-clipboard-list"></i>
                     </button>
@@ -3021,16 +3133,32 @@
                       <i class="fas fa-trash"></i>
                     </button>
                   </div>
-                  {% else %}
+                  {% elif row_status == 'sold' %}
                   <div class="d-flex gap-1 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
+                      <i class="fas fa-user"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
+                      <i class="fas fa-home"></i>
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="{{ t.id }}" title="View Trip Request">
                       <i class="fas fa-clipboard-list"></i>
                     </button>
-                    {% if row_status != 'sold' %}
+                  </div>
+                  {% else %}
+                  <div class="d-flex gap-1 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
+                      <i class="fas fa-user"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
+                      <i class="fas fa-home"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="{{ t.id }}" title="View Trip Request">
+                      <i class="fas fa-clipboard-list"></i>
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-crimson admin-trip-delete-btn" data-trip-id="{{ t.id }}" title="Delete">
                       <i class="fas fa-trash"></i>
                     </button>
-                    {% endif %}
                   </div>
                   {% endif %}
                 </td>
@@ -3369,9 +3497,16 @@
               <button type="button" class="sqh-modal-close" data-bs-dismiss="modal" aria-label="Close"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body p-4 text-center">
-              <div id="adminTripActionIcon" class="mb-3" style="font-size:2.4rem;color:var(--clr-primary);"><i class="fas fa-question-circle"></i></div>
-              <p class="fw-bold mb-1" id="adminTripActionTitle">Proceed with this action?</p>
-              <p class="text-muted small mb-3" id="adminTripActionDesc">This change will be applied immediately.</p>
+              <div id="adminTripActionIcon" class="mb-3" style="font-size:2.8rem;color:var(--clr-accent-dk);"><i class="fas fa-check-circle"></i></div>
+              <p class="fw-bold mb-1" id="adminTripActionTitle">Approve this tripping request?</p>
+              <p class="text-muted small mb-3" id="adminTripActionDesc">The client will be notified that the tripping request was approved.</p>
+              <div id="adminTripActionNoteWrap" class="text-start mb-3">
+                <label class="sqh-form-label small" style="color:var(--clr-primary,#7a121d);font-weight:600;">Note to client (optional)</label>
+                <div class="input-group sqh-input-group align-items-start">
+                  <span class="input-group-text sqh-ig-text" style="min-height:38px;"><i class="fas fa-sticky-note"></i></span>
+                  <textarea id="adminTripActionNote" class="form-control sqh-form-control" rows="2" placeholder="Optional message for client"></textarea>
+                </div>
+              </div>
               <div class="d-flex gap-2 justify-content-center">
                 <button type="button" class="btn btn-outline-crimson px-4" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn px-4" id="adminTripActionConfirmBtn">Confirm</button>

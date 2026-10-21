@@ -1422,18 +1422,39 @@
                 </select>
               </div>
 
-              <div class="col-md-4">
-                <label class="form-label">If yes</label>
-                <select id="pbDependentsType" class="form-select buyer-icon-input">
-                  <option value="">-- Select --</option>
-                  <option value="children">Children</option>
-                  <option value="parents">Parents</option>
-                  <option value="others">Others</option>
-                </select>
+              <div class="col-md-8" id="depTypeCheckboxesWrap">
+                <label class="form-label">If yes, select category/ies:</label>
+                <div class="d-flex flex-wrap gap-4 align-items-center p-2 rounded border bg-light">
+                  <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="depTypeChildren" name="depTypeChildren">
+                    <label class="form-check-label fw-semibold" for="depTypeChildren">Children</label>
+                  </div>
+                  <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="depTypeParents" name="depTypeParents">
+                    <label class="form-check-label fw-semibold" for="depTypeParents">Parents</label>
+                  </div>
+                  <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="depTypeOthers" name="depTypeOthers">
+                    <label class="form-check-label fw-semibold" for="depTypeOthers">Others</label>
+                  </div>
+                </div>
+                <div id="depTypeOthersSpecifyWrap" class="mt-2 d-none">
+                  <input type="text" id="depTypeOthersSpecify" class="form-control buyer-icon-input" placeholder="Specify others (e.g. Siblings, Relatives)">
+                </div>
               </div>
-              <div class="col-md-4"><label class="form-label">No. of Dependents - Children</label><input id="pbDependentsChildren" type="number" min="0" class="form-control buyer-icon-input" value="{{ pb.dependents if pb and pb.dependents is not none else '' }}"></div>
-              <div class="col-md-4"><label class="form-label">No. of Dependents - Parents</label><input id="pbDependentsParents" type="number" min="0" class="form-control buyer-icon-input"></div>
-              <div class="col-md-4"><label class="form-label">No. of Dependents - Others</label><input id="pbDependentsOthers" type="number" min="0" class="form-control buyer-icon-input"></div>
+
+              <div class="col-md-4" id="depCountChildrenWrap">
+                <label class="form-label">No. of Children:</label>
+                <input id="pbDependentsChildren" type="number" min="0" class="form-control buyer-icon-input" value="{{ pb.dependents if pb and pb.dependents is not none else '' }}" placeholder="0">
+              </div>
+              <div class="col-md-4" id="depCountParentsWrap">
+                <label class="form-label">No. of Parents:</label>
+                <input id="pbDependentsParents" type="number" min="0" class="form-control buyer-icon-input" placeholder="0">
+              </div>
+              <div class="col-md-4" id="depCountOthersWrap">
+                <label class="form-label">No. of Others:</label>
+                <input id="pbDependentsOthers" type="number" min="0" class="form-control buyer-icon-input" placeholder="0">
+              </div>
 
               <div class="col-md-4"><label class="form-label">Telephone No.</label><input id="pbTelephone" class="form-control buyer-icon-input" value="{{ pb.contact_no if pb and pb.contact_no else '' }}" inputmode="numeric" maxlength="12" placeholder="0212345678"></div>
               <div class="col-md-4"><label class="form-label">Mobile No.</label><input id="pbMobile" class="form-control buyer-icon-input" value="{{ pb.contact_number if pb and pb.contact_number else (current_user.contact_number or '') }}" inputmode="numeric" maxlength="11" placeholder="09171234567"></div>
@@ -1561,10 +1582,13 @@
                 <label class="form-label">Address Source</label>
                 <select id="pbMailPref" class="form-select buyer-icon-input">
                   <option value="">-- Select --</option>
-                  <option value="home">Home</option>
                   <option value="residence">Residence</option>
                   <option value="office">Office</option>
+                  <option value="others">Others (pls specify)</option>
                 </select>
+                <div id="pbMailPrefOtherWrap" class="mt-2 d-none">
+                  <input type="text" id="pbMailPrefOther" class="form-control buyer-icon-input" placeholder="Specify billing address description (e.g. Relative address, P.O. Box)">
+                </div>
               </div>
               <div class="col-md-6"><label class="form-label">No.</label><input id="pbMailNo" class="form-control buyer-icon-input" inputmode="numeric" maxlength="6" placeholder="e.g. 123"></div>
               <div class="col-md-6"><label class="form-label">Street</label><input id="pbMailStreet" class="form-control buyer-icon-input"></div>
@@ -1806,28 +1830,96 @@
               </div>
             </div>
             <div class="row g-3 mb-4">
+              <!-- Occupation Rank Grid -->
               <div class="col-md-6">
-                <label class="form-label">Occupation Rank (Principal Buyer / Spouse)</label>
-                <select id="buyerRank" class="form-select buyer-icon-input">
-                  <option value="">-- Select --</option>
-                  <option value="business-owner">Business Owner</option>
-                  <option value="top-executive">Top Executive</option>
-                  <option value="manager-supervisor">Manager/Supervisor</option>
-                  <option value="rank-and-file">Rank &amp; File</option>
-                  <option value="others">Others</option>
-                </select>
+                <label class="form-label fw-bold"><i class="fas fa-briefcase me-1 text-primary"></i>Occupation Rank</label>
+                <div class="table-responsive border rounded bg-white p-2">
+                  <table class="table table-sm table-bordered align-middle mb-1" style="font-size:0.82rem;">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Occupation Rank</th>
+                        <th class="text-center" style="width: 105px;">Principal Buyer</th>
+                        <th class="text-center" style="width: 105px;">Spouse</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Business Owner</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_business_owner" name="occ_pb_business_owner"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_business_owner" name="occ_sp_business_owner"></td>
+                      </tr>
+                      <tr>
+                        <td>Top Executive</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_top_exec" name="occ_pb_top_exec"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_top_exec" name="occ_sp_top_exec"></td>
+                      </tr>
+                      <tr>
+                        <td>Manager/Supervisor</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_manager" name="occ_pb_manager"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_manager" name="occ_sp_manager"></td>
+                      </tr>
+                      <tr>
+                        <td>Rank &amp; File</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_rank_file" name="occ_pb_rank_file"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_rank_file" name="occ_sp_rank_file"></td>
+                      </tr>
+                      <tr>
+                        <td>Others</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_pb_others" name="occ_pb_others"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="occ_sp_others" name="occ_sp_others"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div id="occRankOtherWrap" class="mt-2 d-none">
+                    <input type="text" id="occRankOtherSpecify" class="form-control form-control-sm buyer-icon-input" placeholder="Specify rank (e.g. Freelancer, Consultant)">
+                  </div>
+                </div>
               </div>
 
+              <!-- Source of Funds Grid -->
               <div class="col-md-6">
-                <label class="form-label">Source of Funds (Principal Buyer / Spouse)</label>
-                <select id="buyerFunds" class="form-select buyer-icon-input">
-                  <option value="">-- Select --</option>
-                  <option value="employment">Employment</option>
-                  <option value="business">Business</option>
-                  <option value="inheritance">Inheritance</option>
-                  <option value="remittance">Remittance</option>
-                  <option value="others">Others</option>
-                </select>
+                <label class="form-label fw-bold"><i class="fas fa-coins me-1 text-primary"></i>Source of Funds</label>
+                <div class="table-responsive border rounded bg-white p-2">
+                  <table class="table table-sm table-bordered align-middle mb-1" style="font-size:0.82rem;">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Source of Funds</th>
+                        <th class="text-center" style="width: 105px;">Principal Buyer</th>
+                        <th class="text-center" style="width: 105px;">Spouse</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Employment</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_employment" name="fund_pb_employment"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_employment" name="fund_sp_employment"></td>
+                      </tr>
+                      <tr>
+                        <td>Business</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_business" name="fund_pb_business"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_business" name="fund_sp_business"></td>
+                      </tr>
+                      <tr>
+                        <td>Inheritance</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_inheritance" name="fund_pb_inheritance"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_inheritance" name="fund_sp_inheritance"></td>
+                      </tr>
+                      <tr>
+                        <td>Remittance</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_remittance" name="fund_pb_remittance"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_remittance" name="fund_sp_remittance"></td>
+                      </tr>
+                      <tr>
+                        <td>Others</td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_pb_others" name="fund_pb_others"></td>
+                        <td class="text-center"><input type="checkbox" class="form-check-input" id="fund_sp_others" name="fund_sp_others"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div id="fundOtherWrap" class="mt-2 d-none">
+                    <input type="text" id="fundOtherSpecify" class="form-control form-control-sm buyer-icon-input" placeholder="Specify source (e.g. Investments, Pension)">
+                  </div>
+                </div>
               </div>
 
               <div class="col-md-6">
@@ -1837,8 +1929,11 @@
                   <option value="owned">Owned</option>
                   <option value="rented">Rented</option>
                   <option value="owned-by-parents">Owned by Parents</option>
-                  <option value="others">Others</option>
+                  <option value="others">Others (pls specify)</option>
                 </select>
+                <div id="homeOwnershipOtherWrap" class="mt-2 d-none">
+                  <input type="text" id="homeOwnershipOther" class="form-control buyer-icon-input" placeholder="Please specify home ownership (e.g. Living with in-laws, Company-provided)">
+                </div>
               </div>
 
               <div class="col-md-6">
@@ -1883,6 +1978,9 @@
                   <option value="exhibit-booth">Exhibit/Booth</option>
                   <option value="other-sources">Other Sources</option>
                 </select>
+                <div id="projectSourceOtherWrap" class="mt-2 d-none">
+                  <input type="text" id="projectSourceOther" class="form-control buyer-icon-input" placeholder="Specify other source (e.g. Facebook Ads, TikTok, Event booth)">
+                </div>
               </div>
 
               <div class="col-md-6">

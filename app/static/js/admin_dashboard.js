@@ -3566,7 +3566,7 @@ function _openPurchaseListForProperty(propId, propName) {
       if (nameEl) nameEl.textContent = data.property_name || _purchaseListState.propertyName;
       if (summaryEl) {
         summaryEl.textContent = submittedRows.length + ' submitted form' + (submittedRows.length === 1 ? '' : 's')
-          + ' • ' + visitedLeadsRows.length + ' visited lead' + (visitedLeadsRows.length === 1 ? '' : 's');
+          + ' • ' + visitedLeadsRows.length + ' hot lead' + (visitedLeadsRows.length === 1 ? '' : 's') + ' (visited)';
       }
       if (submittedBadgeEl) submittedBadgeEl.textContent = String(submittedRows.length);
       if (visitedBadgeEl) visitedBadgeEl.textContent = String(visitedLeadsRows.length);
@@ -3652,7 +3652,7 @@ function _openPurchaseListForProperty(propId, propName) {
         }
       }
 
-      // ── Render Tab 2: Visited Leads (Pending Submission) ──
+      // ── Render Tab 2: Visitors (Hot Leads) ──
       if (visitedBodyEl) {
         visitedBodyEl.innerHTML = '';
         if (!visitedLeadsRows.length) {
@@ -3676,8 +3676,6 @@ function _openPurchaseListForProperty(propId, propName) {
               + (!row.client_phone && !row.client_email ? '<span class="text-muted small">—</span>' : '')
               + '</div>';
 
-            var followUpStatusHtml = '<span class="sqh-badge badge-conditional"><i class="fas fa-clock me-1"></i>Awaiting Form Submission</span>';
-
             var actionsHtml = '<div class="d-flex gap-2 flex-nowrap justify-content-end align-items-center">'
               + (clientId
                 ? '<button type="button" class="btn btn-sm btn-outline-primary purchase-list-client-btn" data-client-id="' + clientId + '" title="View Full Client Account Details"><i class="fas fa-user me-1"></i>View Client Profile</button>'
@@ -3688,7 +3686,7 @@ function _openPurchaseListForProperty(propId, propName) {
               + '<td>' + clientDisplay + '</td>'
               + '<td>' + visitDateText + '</td>'
               + '<td>' + contactHtml + '</td>'
-              + '<td>' + followUpStatusHtml + '</td>'
+              + '<td><span class="small fw-semibold text-dark"><i class="fas fa-user-tie text-muted me-1"></i>' + _escHtml(row.assigned_agent_name || '—') + '</span></td>'
               + '<td class="text-end">' + actionsHtml + '</td>';
 
             visitedBodyEl.appendChild(tr);
@@ -4372,6 +4370,51 @@ function _openPurchaseFormView(tripId, skipShowModal) {
       ltSelect.value = '';
       if (ltOther) { ltOther.classList.add('d-none'); ltOther.value = ''; }
     }
+  }
+
+  // Unhide custom conditional wrappers in admin view if values or flags are present
+  var depOthersEl = document.getElementById('depTypeOthers');
+  var depOthersWrap = document.getElementById('depTypeOthersSpecifyWrap');
+  var depOthersSpec = document.getElementById('depTypeOthersSpecify');
+  if (depOthersWrap) {
+    depOthersWrap.classList.toggle('d-none', !(depOthersEl && depOthersEl.checked) && !(depOthersSpec && depOthersSpec.value));
+  }
+
+  var mailPrefEl = document.getElementById('pbMailPref');
+  var mailPrefWrap = document.getElementById('pbMailPrefOtherWrap');
+  var mailPrefSpec = document.getElementById('pbMailPrefOther');
+  if (mailPrefWrap) {
+    mailPrefWrap.classList.toggle('d-none', !(mailPrefEl && mailPrefEl.value === 'others') && !(mailPrefSpec && mailPrefSpec.value));
+  }
+
+  var homeOwnEl = document.getElementById('homeOwnership');
+  var homeOwnWrap = document.getElementById('homeOwnershipOtherWrap');
+  var homeOwnSpec = document.getElementById('homeOwnershipOther');
+  if (homeOwnWrap) {
+    homeOwnWrap.classList.toggle('d-none', !(homeOwnEl && homeOwnEl.value === 'others') && !(homeOwnSpec && homeOwnSpec.value));
+  }
+
+  var projSrcEl = document.getElementById('projectSource');
+  var projSrcWrap = document.getElementById('projectSourceOtherWrap');
+  var projSrcSpec = document.getElementById('projectSourceOther');
+  if (projSrcWrap) {
+    projSrcWrap.classList.toggle('d-none', !(projSrcEl && (projSrcEl.value === 'other-sources' || projSrcEl.value === 'others')) && !(projSrcSpec && projSrcSpec.value));
+  }
+
+  var occPbOther = document.getElementById('occ_pb_others');
+  var occSpOther = document.getElementById('occ_sp_others');
+  var occOtherWrap = document.getElementById('occRankOtherWrap');
+  var occOtherSpec = document.getElementById('occRankOtherSpecify');
+  if (occOtherWrap) {
+    occOtherWrap.classList.toggle('d-none', !(occPbOther && occPbOther.checked) && !(occSpOther && occSpOther.checked) && !(occOtherSpec && occOtherSpec.value));
+  }
+
+  var fundPbOther = document.getElementById('fund_pb_others');
+  var fundSpOther = document.getElementById('fund_sp_others');
+  var fundOtherWrap = document.getElementById('fundOtherWrap');
+  var fundOtherSpec = document.getElementById('fundOtherSpecify');
+  if (fundOtherWrap) {
+    fundOtherWrap.classList.toggle('d-none', !(fundPbOther && fundPbOther.checked) && !(fundSpOther && fundSpOther.checked) && !(fundOtherSpec && fundOtherSpec.value));
   }
 
   var editableLoanIds = {
@@ -7969,36 +8012,35 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
       var clientId = String(row.getAttribute('data-client-id') || '').trim();
       var noteInputHtml = '<input type="hidden" id="tripNote-' + tripId + '" value="' + (String(note || '').replace(/"/g, '&quot;')) + '">';
 
+      var clientBtnHtml = '  <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="' + clientId + '" title="View Client Details"><i class="fas fa-user"></i></button>';
+      var propBtnHtml = '  <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="' + propId + '" title="View House Details"><i class="fas fa-home"></i></button>';
+      var tripBtnHtml = '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request"><i class="fas fa-clipboard-list"></i></button>';
+      var deleteBtnHtml = '  <button type="button" class="btn btn-sm btn-outline-crimson admin-trip-delete-btn" data-trip-id="' + String(tripId || '') + '" title="Delete"><i class="fas fa-trash"></i></button>';
+
       if (status === 'approved') {
         actionCell.innerHTML = noteInputHtml
           + '<div class="d-flex gap-1 flex-wrap">'
-          + '  <button type="button" class="btn btn-sm btn-outline-blue admin-trip-visit-btn" data-trip-id="' + String(tripId || '') + '" title="Mark as Visited">'
-          + '    <i class="fas fa-map-marked-alt"></i>'
-          + '  </button>'
-          + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
-          + '    <i class="fas fa-clipboard-list"></i>'
-          + '  </button>'
-          + '  <button type="button" class="btn btn-sm btn-outline-crimson admin-trip-delete-btn" data-trip-id="' + String(tripId || '') + '" title="Delete">'
-          + '    <i class="fas fa-trash"></i>'
-          + '  </button>'
+          + '  <button type="button" class="btn btn-sm btn-outline-blue admin-trip-visit-btn" data-trip-id="' + String(tripId || '') + '" title="Mark as Visited"><i class="fas fa-map-marked-alt"></i></button>'
+          + clientBtnHtml
+          + propBtnHtml
+          + tripBtnHtml
+          + deleteBtnHtml
           + '</div>';
       } else if (status === 'sold') {
         actionCell.innerHTML = noteInputHtml
           + '<div class="d-flex gap-1 flex-wrap">'
-          + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
-          + '    <i class="fas fa-clipboard-list"></i>'
-          + '  </button>'
+          + clientBtnHtml
+          + propBtnHtml
+          + tripBtnHtml
           + '</div>';
       } else {
         // visited or rejected
         actionCell.innerHTML = noteInputHtml
           + '<div class="d-flex gap-1 flex-wrap">'
-          + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
-          + '    <i class="fas fa-clipboard-list"></i>'
-          + '  </button>'
-          + '  <button type="button" class="btn btn-sm btn-outline-crimson admin-trip-delete-btn" data-trip-id="' + String(tripId || '') + '" title="Delete">'
-          + '    <i class="fas fa-trash"></i>'
-          + '  </button>'
+          + clientBtnHtml
+          + propBtnHtml
+          + tripBtnHtml
+          + deleteBtnHtml
           + '</div>';
       }
     }
@@ -8069,6 +8111,12 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
     if (approveBtn) approveBtn.disabled = !selectedId;
 
     bootstrap.Modal.getInstance(document.getElementById('adminTripAssignModal'))?.hide();
+
+    if (selectedId) {
+      setTimeout(function () {
+        _openTripActionConfirm('approve', tripId);
+      }, 180);
+    }
   });
 
   function _openTripActionConfirm(action, tripId) {
@@ -8080,14 +8128,32 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
     var iconEl = document.getElementById('adminTripActionIcon');
     var titleEl = document.getElementById('adminTripActionTitle');
     var descEl = document.getElementById('adminTripActionDesc');
+    var noteWrap = document.getElementById('adminTripActionNoteWrap');
+    var noteEl = document.getElementById('adminTripActionNote');
     var btnEl = document.getElementById('adminTripActionConfirmBtn');
     if (!iconEl || !titleEl || !descEl || !btnEl) return;
+
+    if (noteEl) {
+      var row = document.getElementById('admin-trip-row-' + tripId);
+      var existingNote = '';
+      if (row) {
+        var hiddenNote = document.getElementById('tripNote-' + tripId);
+        if (hiddenNote && hiddenNote.value) {
+          existingNote = hiddenNote.value;
+        } else {
+          var rowNote = row.getAttribute('data-agent-note');
+          if (rowNote && rowNote !== 'No note provided.') existingNote = rowNote;
+        }
+      }
+      noteEl.value = existingNote;
+    }
 
     if (action === 'approve') {
       iconEl.innerHTML = '<i class="fas fa-check-circle"></i>';
       iconEl.style.color = 'var(--clr-accent-dk)';
       titleEl.textContent = 'Approve this tripping request?';
-      descEl.textContent = 'The selected available agent will be assigned to this request.';
+      descEl.textContent = 'The client will be notified that the tripping request was approved.';
+      if (noteWrap) noteWrap.classList.remove('d-none');
       btnEl.className = 'btn btn-lime px-4';
       btnEl.innerHTML = '<i class="fas fa-check me-1"></i>Approve';
     } else if (action === 'visited') {
@@ -8095,13 +8161,15 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
       iconEl.style.color = 'var(--clr-blue)';
       titleEl.textContent = 'Mark this trip as visited?';
       descEl.textContent = 'The request will be marked as visited and the visit status will be updated.';
+      if (noteWrap) noteWrap.classList.remove('d-none');
       btnEl.className = 'btn btn-outline-blue px-4';
       btnEl.innerHTML = '<i class="fas fa-map-marked-alt me-1"></i>Mark Visited';
     } else if (action === 'reject') {
       iconEl.innerHTML = '<i class="fas fa-times-circle"></i>';
       iconEl.style.color = 'var(--clr-primary)';
       titleEl.textContent = 'Reject this tripping request?';
-      descEl.textContent = 'The request will be marked as rejected and can still be deleted later.';
+      descEl.textContent = 'The client will be notified that the tripping request was rejected.';
+      if (noteWrap) noteWrap.classList.remove('d-none');
       btnEl.className = 'btn btn-crimson px-4';
       btnEl.innerHTML = '<i class="fas fa-times me-1"></i>Reject';
     } else if (action === 'sold') {
@@ -8109,6 +8177,7 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
       iconEl.style.color = 'var(--clr-blue)';
       titleEl.textContent = 'Mark this trip as sold?';
       descEl.textContent = 'The property will be marked sold and both client and assigned agent will be notified.';
+      if (noteWrap) noteWrap.classList.remove('d-none');
       btnEl.className = 'btn btn-outline-blue px-4';
       btnEl.innerHTML = '<i class="fas fa-handshake me-1"></i>Mark Sold';
     } else {
@@ -8116,6 +8185,7 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
       iconEl.style.color = 'var(--clr-primary)';
       titleEl.textContent = 'Delete this finalized request?';
       descEl.textContent = 'Only approved or rejected requests can be deleted. This cannot be undone.';
+      if (noteWrap) noteWrap.classList.add('d-none');
       btnEl.className = 'btn btn-crimson px-4';
       btnEl.innerHTML = '<i class="fas fa-trash me-1"></i>Delete';
     }
@@ -8132,8 +8202,11 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processing…';
 
+    var noteEl = document.getElementById('adminTripActionNote');
+    var noteVal = noteEl ? (noteEl.value || '').trim() : '';
+
     var payload = {
-      note: ((document.getElementById('tripNote-' + tripId) || {}).value || '').trim()
+      note: noteVal
     };
     var url = '';
 
@@ -8182,6 +8255,9 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
         }
 
         bootstrap.Modal.getInstance(document.getElementById('adminTripActionConfirmModal'))?.hide();
+
+        var hiddenNote = document.getElementById('tripNote-' + tripId);
+        if (hiddenNote) hiddenNote.value = payload.note || '';
 
         if (action === 'approve') {
           _setTripRowFinalized(tripId, 'approved', payload.note || '');
@@ -8291,10 +8367,7 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
   });
 
   document.querySelectorAll('.admin-trip-approve-btn').forEach(function (btn) {
-    var tripId = String(btn.getAttribute('data-trip-id') || '').trim();
-    if (!tripId) return;
-    var selectedAgent = String(((document.getElementById('tripAssignAgent-' + tripId) || {}).value || '')).trim();
-    btn.disabled = !selectedAgent;
+    btn.disabled = false;
   });
 
   _bind('adminTrmPrev', 'click', function (e) {

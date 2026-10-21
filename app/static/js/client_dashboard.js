@@ -1483,10 +1483,58 @@
       }
     });
 
+    // Backward compatibility for legacy pbDependentsType
+    if (payload.pbDependentsType && !payload.depTypeChildren && !payload.depTypeParents && !payload.depTypeOthers) {
+      var dType = String(payload.pbDependentsType).toLowerCase();
+      if (dType === 'children') { var c1 = document.getElementById('depTypeChildren'); if (c1) c1.checked = true; }
+      else if (dType === 'parents') { var c2 = document.getElementById('depTypeParents'); if (c2) c2.checked = true; }
+      else if (dType === 'others') { var c3 = document.getElementById('depTypeOthers'); if (c3) c3.checked = true; }
+    }
+    // Backward compatibility for legacy buyerRank
+    if (payload.buyerRank) {
+      var rMap = {
+        'business-owner': 'occ_pb_business_owner',
+        'top-executive': 'occ_pb_top_exec',
+        'manager-supervisor': 'occ_pb_manager',
+        'rank-and-file': 'occ_pb_rank_file',
+        'others': 'occ_pb_others'
+      };
+      var targetRankId = rMap[String(payload.buyerRank).toLowerCase()];
+      if (targetRankId) {
+        var rEl = document.getElementById(targetRankId);
+        if (rEl) rEl.checked = true;
+      }
+    }
+    // Backward compatibility for legacy buyerFunds
+    if (payload.buyerFunds) {
+      var fMap = {
+        'employment': 'fund_pb_employment',
+        'business': 'fund_pb_business',
+        'inheritance': 'fund_pb_inheritance',
+        'remittance': 'fund_pb_remittance',
+        'others': 'fund_pb_others'
+      };
+      var targetFundId = fMap[String(payload.buyerFunds).toLowerCase()];
+      if (targetFundId) {
+        var fEl = document.getElementById(targetFundId);
+        if (fEl) fEl.checked = true;
+      }
+    }
+
     var depSel = document.getElementById('pbDependentsYesNo');
     if (depSel) depSel.dispatchEvent(new Event('change'));
     var bankSel = document.getElementById('hasBankAccount');
     if (bankSel) bankSel.dispatchEvent(new Event('change'));
+    var homeOwnerSel = document.getElementById('homeOwnership');
+    if (homeOwnerSel) homeOwnerSel.dispatchEvent(new Event('change'));
+    var projSourceSel = document.getElementById('projectSource');
+    if (projSourceSel) projSourceSel.dispatchEvent(new Event('change'));
+    var mailPrefSel = document.getElementById('pbMailPref');
+    if (mailPrefSel) mailPrefSel.dispatchEvent(new Event('change'));
+    var occPbOthersEl = document.getElementById('occ_pb_others');
+    if (occPbOthersEl) occPbOthersEl.dispatchEvent(new Event('change'));
+    var fundPbOthersEl = document.getElementById('fund_pb_others');
+    if (fundPbOthersEl) fundPbOthersEl.dispatchEvent(new Event('change'));
 
     var finEl = document.getElementById('loanFinancing');
     if (finEl) {
@@ -1516,21 +1564,59 @@
   function _wireBuyerDependentsToggle() {
     var yesNo = document.getElementById('pbDependentsYesNo');
     if (!yesNo) return;
-    var dependentIds = ['pbDependentsType', 'pbDependentsChildren', 'pbDependentsParents', 'pbDependentsOthers'];
-    var applyState = function () {
+    var chkChildren = document.getElementById('depTypeChildren');
+    var chkParents = document.getElementById('depTypeParents');
+    var chkOthers = document.getElementById('depTypeOthers');
+    var othersSpecifyWrap = document.getElementById('depTypeOthersSpecifyWrap');
+    var othersSpecifyInput = document.getElementById('depTypeOthersSpecify');
+    var countChildren = document.getElementById('pbDependentsChildren');
+    var countParents = document.getElementById('pbDependentsParents');
+    var countOthers = document.getElementById('pbDependentsOthers');
+
+    function syncDependentCategory(chk, countInput) {
+      if (!countInput) return;
+      var isYes = String(yesNo.value || '').toLowerCase() === 'yes';
+      var active = isYes && chk && chk.checked;
+      countInput.disabled = !active;
+      countInput.classList.toggle('sqh-disabled-field', !active);
+      var group = countInput.closest('.col-12, .col-md-2, .col-md-3, .col-md-4, .col-md-6') || countInput.parentElement;
+      if (group) group.classList.toggle('buyer-disabled-group', !active);
+      if (!active) countInput.value = '';
+    }
+
+    function syncOthersSpecify() {
+      var isYes = String(yesNo.value || '').toLowerCase() === 'yes';
+      var active = isYes && chkOthers && chkOthers.checked;
+      if (othersSpecifyWrap) othersSpecifyWrap.classList.toggle('d-none', !active);
+      if (othersSpecifyInput) {
+        othersSpecifyInput.disabled = !active;
+        othersSpecifyInput.classList.toggle('sqh-disabled-field', !active);
+        if (!active) othersSpecifyInput.value = '';
+      }
+    }
+
+    function applyState() {
       var enabled = String(yesNo.value || '').toLowerCase() === 'yes';
-      dependentIds.forEach(function (id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        el.disabled = !enabled;
-        el.classList.toggle('sqh-disabled-field', !enabled);
-        var group = el.closest('.col-12, .col-md-2, .col-md-3, .col-md-4, .col-md-6') || el.parentElement;
-        if (group) group.classList.toggle('buyer-disabled-group', !enabled);
-        if (!enabled && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) el.value = '';
-        if (!enabled && el.tagName === 'SELECT') el.selectedIndex = 0;
+      [chkChildren, chkParents, chkOthers].forEach(function (chk) {
+        if (!chk) return;
+        chk.disabled = !enabled;
+        if (!enabled) chk.checked = false;
       });
-    };
+
+      syncDependentCategory(chkChildren, countChildren);
+      syncDependentCategory(chkParents, countParents);
+      syncDependentCategory(chkOthers, countOthers);
+      syncOthersSpecify();
+    }
+
     yesNo.addEventListener('change', applyState);
+    if (chkChildren) chkChildren.addEventListener('change', function () { syncDependentCategory(chkChildren, countChildren); });
+    if (chkParents) chkParents.addEventListener('change', function () { syncDependentCategory(chkParents, countParents); });
+    if (chkOthers) chkOthers.addEventListener('change', function () {
+      syncDependentCategory(chkOthers, countOthers);
+      syncOthersSpecify();
+    });
+
     applyState();
   }
 
@@ -1838,6 +1924,158 @@
     setTimeout(syncWhenHomeSource, 120);
   }
 
+  function _copyEmployerAddressToMailing() {
+    var pairs = [
+      ['pbEmpAddressNo', 'pbMailNo'],
+      ['pbEmpStreet', 'pbMailStreet'],
+      ['pbEmpCountry', 'pbMailCountry'],
+      ['pbEmpLocation', 'pbMailLocation'],
+      ['pbEmpRegionCode', 'pbMailRegionCode'],
+      ['pbEmpRegionName', 'pbMailRegionName'],
+      ['pbEmpProvinceCode', 'pbMailProvinceCode'],
+      ['pbEmpProvinceName', 'pbMailProvinceName'],
+      ['pbEmpCityCode', 'pbMailCityCode'],
+      ['pbEmpCityName', 'pbMailCityName'],
+      ['pbEmpBarangayCode', 'pbMailBarangayCode'],
+      ['pbEmpBarangayName', 'pbMailBarangayName']
+    ];
+    pairs.forEach(function (pair) {
+      var from = document.getElementById(pair[0]);
+      var to = document.getElementById(pair[1]);
+      if (from && to) to.value = from.value || '';
+    });
+
+    var regionSelect = document.getElementById('pbMailRegionSelect');
+    var provinceSelect = document.getElementById('pbMailProvinceSelect');
+    var citySelect = document.getElementById('pbMailCitySelect');
+    var barangaySelect = document.getElementById('pbMailBarangaySelect');
+    var empRegionCode = (document.getElementById('pbEmpRegionCode') || {}).value || '';
+    var empProvinceCode = (document.getElementById('pbEmpProvinceCode') || {}).value || '';
+    var empCityCode = (document.getElementById('pbEmpCityCode') || {}).value || '';
+    var empBarangayCode = (document.getElementById('pbEmpBarangayCode') || {}).value || '';
+
+    function selectWhenReady(selectEl, value, cb, retries) {
+      if (!selectEl || !value) {
+        if (typeof cb === 'function') cb();
+        return;
+      }
+      var maxRetries = typeof retries === 'number' ? retries : 20;
+      var attempt = 0;
+      (function applyValue() {
+        var hasOption = Array.from(selectEl.options || []).some(function (opt) { return opt.value === value; });
+        if (hasOption) {
+          selectEl.value = value;
+          selectEl.dispatchEvent(new Event('change'));
+          if (typeof cb === 'function') cb();
+          return;
+        }
+        if (attempt >= maxRetries) {
+          if (typeof cb === 'function') cb();
+          return;
+        }
+        attempt += 1;
+        setTimeout(applyValue, 120);
+      })();
+    }
+
+    selectWhenReady(regionSelect, empRegionCode, function () {
+      selectWhenReady(provinceSelect, empProvinceCode, function () {
+        selectWhenReady(citySelect, empCityCode, function () {
+          selectWhenReady(barangaySelect, empBarangayCode);
+        });
+      });
+    });
+  }
+
+  function _wireBuyerCustomOthersToggles() {
+    // 1. Occupation Rank Others
+    var occPbOthers = document.getElementById('occ_pb_others');
+    var occSpOthers = document.getElementById('occ_sp_others');
+    var occOtherWrap = document.getElementById('occRankOtherWrap');
+    var occOtherInput = document.getElementById('occRankOtherSpecify');
+    function syncOccOthers() {
+      var active = (occPbOthers && occPbOthers.checked) || (occSpOthers && occSpOthers.checked);
+      if (occOtherWrap) occOtherWrap.classList.toggle('d-none', !active);
+      if (occOtherInput) {
+        occOtherInput.disabled = !active;
+        if (!active) occOtherInput.value = '';
+      }
+    }
+    if (occPbOthers) occPbOthers.addEventListener('change', syncOccOthers);
+    if (occSpOthers) occSpOthers.addEventListener('change', syncOccOthers);
+
+    // 2. Source of Funds Others
+    var fundPbOthers = document.getElementById('fund_pb_others');
+    var fundSpOthers = document.getElementById('fund_sp_others');
+    var fundOtherWrap = document.getElementById('fundOtherWrap');
+    var fundOtherInput = document.getElementById('fundOtherSpecify');
+    function syncFundOthers() {
+      var active = (fundPbOthers && fundPbOthers.checked) || (fundSpOthers && fundSpOthers.checked);
+      if (fundOtherWrap) fundOtherWrap.classList.toggle('d-none', !active);
+      if (fundOtherInput) {
+        fundOtherInput.disabled = !active;
+        if (!active) fundOtherInput.value = '';
+      }
+    }
+    if (fundPbOthers) fundPbOthers.addEventListener('change', syncFundOthers);
+    if (fundSpOthers) fundSpOthers.addEventListener('change', syncFundOthers);
+
+    // 3. Home Ownership Others
+    var homeOwnership = document.getElementById('homeOwnership');
+    var homeOwnershipOtherWrap = document.getElementById('homeOwnershipOtherWrap');
+    var homeOwnershipOther = document.getElementById('homeOwnershipOther');
+    function syncHomeOwnership() {
+      var isOther = String((homeOwnership && homeOwnership.value) || '').toLowerCase() === 'others';
+      if (homeOwnershipOtherWrap) homeOwnershipOtherWrap.classList.toggle('d-none', !isOther);
+      if (homeOwnershipOther) {
+        homeOwnershipOther.disabled = !isOther;
+        if (!isOther) homeOwnershipOther.value = '';
+      }
+    }
+    if (homeOwnership) homeOwnership.addEventListener('change', syncHomeOwnership);
+
+    // 4. Project Source Others
+    var projectSource = document.getElementById('projectSource');
+    var projectSourceOtherWrap = document.getElementById('projectSourceOtherWrap');
+    var projectSourceOther = document.getElementById('projectSourceOther');
+    function syncProjectSource() {
+      var val = String((projectSource && projectSource.value) || '').toLowerCase();
+      var isOther = val === 'other-sources' || val === 'others';
+      if (projectSourceOtherWrap) projectSourceOtherWrap.classList.toggle('d-none', !isOther);
+      if (projectSourceOther) {
+        projectSourceOther.disabled = !isOther;
+        if (!isOther) projectSourceOther.value = '';
+      }
+    }
+    if (projectSource) projectSource.addEventListener('change', syncProjectSource);
+
+    // 5. Preferred Mailing Address Others
+    var mailPref = document.getElementById('pbMailPref');
+    var mailPrefOtherWrap = document.getElementById('pbMailPrefOtherWrap');
+    var mailPrefOther = document.getElementById('pbMailPrefOther');
+    function syncMailPref() {
+      var val = String((mailPref && mailPref.value) || '').toLowerCase();
+      var isOther = val === 'others';
+      if (mailPrefOtherWrap) mailPrefOtherWrap.classList.toggle('d-none', !isOther);
+      if (mailPrefOther) {
+        mailPrefOther.disabled = !isOther;
+        if (!isOther) mailPrefOther.value = '';
+      }
+      if (val === 'residence' || val === 'home') {
+        _copyHomeAddressToMailing();
+      } else if (val === 'office') {
+        _copyEmployerAddressToMailing();
+      }
+    }
+    if (mailPref) mailPref.addEventListener('change', syncMailPref);
+
+    syncOccOthers();
+    syncFundOthers();
+    syncHomeOwnership();
+    syncProjectSource();
+    syncMailPref();
+  }
+
   function _initBuyerCountryInputs() {
     var form = document.getElementById('buyerInfoForm');
     if (!form) return;
@@ -1927,6 +2165,14 @@
         el.readOnly = true;
         el.classList.add('sqh-disabled-field');
       });
+    });
+
+    ['occ_sp_business_owner', 'occ_sp_top_exec', 'occ_sp_manager', 'occ_sp_rank_file', 'occ_sp_others',
+     'fund_sp_employment', 'fund_sp_business', 'fund_sp_inheritance', 'fund_sp_remittance', 'fund_sp_others'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.disabled = !hasSpouse;
+      if (!hasSpouse) el.checked = false;
     });
   }
 
@@ -2213,6 +2459,7 @@
   _wireEmploymentOthersToggle();
   _wireBuyerMailAddressSource();
   _wireBuyerSpouseToggle();
+  _wireBuyerCustomOthersToggles();
 
   (function initBuyerESignaturePicker() {
     var picker = document.getElementById('buyerESignaturePicker');

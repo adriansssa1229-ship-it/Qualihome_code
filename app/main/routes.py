@@ -3971,24 +3971,25 @@ def agent_approve_trip(trip_id):
     trip.agent_note = (data.get("note") or "").strip()
     if trip.property_item:
         trip.property_item.agent_id = assigned_agent.id
+    note_txt = f' Note: "{trip.agent_note}"' if trip.agent_note else ""
     db.session.add(AgentNotification(
         agent_id=assigned_agent.id,
         property_id=trip.property_id,
         event_type="trip_assignment",
-        message=f'Tripping assigned: {trip.client.full_name} • "{trip.property_item.name}" on {trip.preferred_date.strftime("%b %d, %Y")}.',
+        message=f'Tripping assigned: {trip.client.full_name} • "{trip.property_item.name}" on {trip.preferred_date.strftime("%b %d, %Y")}.{note_txt}',
     ))
     db.session.add(AgentNotification(
         agent_id=trip.client_id,
         property_id=trip.property_id,
         event_type="trip_approved_client",
-        message=f'Your tripping request for "{trip.property_item.name}" was approved for {trip.preferred_date.strftime("%b %d, %Y")}.',
+        message=f'Your tripping request for "{trip.property_item.name}" was approved for {trip.preferred_date.strftime("%b %d, %Y")}.{note_txt}',
     ))
     log_activity(
         "trip_approve",
         f"Tripping approved and assigned to {assigned_agent.full_name}: {trip.client.full_name} → \"{trip.property_item.name}\""
     )
     db.session.commit()
-    return jsonify({"success": True, "trip_id": trip.id, "status": "approved", "agent_id": assigned_agent.id})
+    return jsonify({"success": True, "trip_id": trip.id, "status": "approved", "agent_id": assigned_agent.id, "note": trip.agent_note})
 
 
 @main_bp.route("/agent/trip/<int:trip_id>/reject", methods=["POST"])
@@ -4005,12 +4006,19 @@ def agent_reject_trip(trip_id):
     data = request.get_json(silent=True) or {}
     trip.status     = "rejected"
     trip.agent_note = (data.get("note") or "").strip()
+    note_txt = f' Note: "{trip.agent_note}"' if trip.agent_note else ""
+    db.session.add(AgentNotification(
+        agent_id=trip.client_id,
+        property_id=trip.property_id,
+        event_type="trip_rejected_client",
+        message=f'Your tripping request for "{trip.property_item.name}" was rejected.{note_txt}',
+    ))
     log_activity(
         "trip_reject",
         f"Tripping rejected: {trip.client.full_name} → \"{trip.property_item.name}\""
     )
     db.session.commit()
-    return jsonify({"success": True, "trip_id": trip.id, "status": "rejected"})
+    return jsonify({"success": True, "trip_id": trip.id, "status": "rejected", "note": trip.agent_note})
 
 
 @main_bp.route("/agent/trip/<int:trip_id>/mark-visited", methods=["POST"])
@@ -5286,11 +5294,13 @@ def print_buyer_information_sheet(trip_id):
             esignature_base64 = None
 
     def get_val(*keys, default=""):
+        if default is None:
+            default = ""
         for k in keys:
             v = payload.get(k)
             if v is not None and str(v).strip() and str(v).strip() != "—":
                 return str(v).strip()
-        return default
+        return str(default)
 
     def fmt_date(d_val):
         if not d_val:
@@ -5337,6 +5347,13 @@ def print_buyer_information_sheet(trip_id):
         "mother_maiden_name": get_val("pbMotherMaiden", "mother_maiden_name"),
         "citizenship": get_val("pbCitizenship", default=profile.citizenship if profile else "Filipino"),
         "dependents_yes_no": get_val("pbDependentsYesNo", default="yes" if (profile and profile.dependents and profile.dependents > 0) else "no").lower(),
+        "dep_children": bool(get_val("depTypeChildren", "dep_children")) or (get_val("pbDependentsType").lower() == "children"),
+        "dep_parents": bool(get_val("depTypeParents", "dep_parents")) or (get_val("pbDependentsType").lower() == "parents"),
+        "dep_others": bool(get_val("depTypeOthers", "dep_others")) or (get_val("pbDependentsType").lower() == "others"),
+        "dep_others_specify": get_val("depTypeOthersSpecify", "dep_others_specify"),
+        "dep_children_count": get_val("pbDependentsChildren", default=str(profile.dependents) if (profile and profile.dependents) else ""),
+        "dep_parents_count": get_val("pbDependentsParents"),
+        "dep_others_count": get_val("pbDependentsOthers"),
         "dependents_type": get_val("pbDependentsType").lower(),
         "dependents_children": get_val("pbDependentsChildren", default=str(profile.dependents) if (profile and profile.dependents) else ""),
         "dependents_parents": get_val("pbDependentsParents"),
@@ -5388,6 +5405,8 @@ def print_buyer_information_sheet(trip_id):
         "position": get_val("pbOccupationalPosition"),
         "tenure": get_val("auto_tenure_1", "pbTenure", default=str(profile.tenure_months) if profile and profile.tenure_months else ""),
         "preferred_mailing": get_val("pbMailPref", default="residence").lower(),
+        "mail_pref_type": get_val("pbMailPref", default="residence").lower(),
+        "mail_pref_other": get_val("pbMailPrefOther", "mail_pref_other"),
 
         # Mailing Address
         "mail_no": get_val("pbMailNo"),
@@ -5444,13 +5463,39 @@ def print_buyer_information_sheet(trip_id):
         "ben2_rel": get_val("beneficiary2Relationship"),
 
         # Section 6: Buyer's Profile
+        "occ_pb_business_owner": bool(get_val("occ_pb_business_owner")) or (get_val("buyerRank").lower() == "business-owner"),
+        "occ_pb_top_exec": bool(get_val("occ_pb_top_exec")) or (get_val("buyerRank").lower() == "top-executive"),
+        "occ_pb_manager": bool(get_val("occ_pb_manager")) or (get_val("buyerRank").lower() == "manager-supervisor"),
+        "occ_pb_rank_file": bool(get_val("occ_pb_rank_file")) or (get_val("buyerRank").lower() == "rank-and-file"),
+        "occ_pb_others": bool(get_val("occ_pb_others")) or (get_val("buyerRank").lower() == "others"),
+        "occ_sp_business_owner": bool(get_val("occ_sp_business_owner")),
+        "occ_sp_top_exec": bool(get_val("occ_sp_top_exec")),
+        "occ_sp_manager": bool(get_val("occ_sp_manager")),
+        "occ_sp_rank_file": bool(get_val("occ_sp_rank_file")),
+        "occ_sp_others": bool(get_val("occ_sp_others")),
+        "occ_other_specify": get_val("occRankOtherSpecify", "occ_other_specify"),
+
+        "fund_pb_employment": bool(get_val("fund_pb_employment")) or (get_val("buyerFunds").lower() == "employment"),
+        "fund_pb_business": bool(get_val("fund_pb_business")) or (get_val("buyerFunds").lower() == "business"),
+        "fund_pb_inheritance": bool(get_val("fund_pb_inheritance")) or (get_val("buyerFunds").lower() == "inheritance"),
+        "fund_pb_remittance": bool(get_val("fund_pb_remittance")) or (get_val("buyerFunds").lower() == "remittance"),
+        "fund_pb_others": bool(get_val("fund_pb_others")) or (get_val("buyerFunds").lower() == "others"),
+        "fund_sp_employment": bool(get_val("fund_sp_employment")),
+        "fund_sp_business": bool(get_val("fund_sp_business")),
+        "fund_sp_inheritance": bool(get_val("fund_sp_inheritance")),
+        "fund_sp_remittance": bool(get_val("fund_sp_remittance")),
+        "fund_sp_others": bool(get_val("fund_sp_others")),
+        "fund_other_specify": get_val("fundOtherSpecify", "fund_other_specify"),
+
         "buyer_rank": get_val("buyerRank").lower(),
         "buyer_funds": get_val("buyerFunds").lower(),
         "home_ownership": get_val("homeOwnership").lower(),
+        "home_ownership_other": get_val("homeOwnershipOther", "home_ownership_other"),
         "length_of_stay": get_val("pbLengthOfStay"),
         "household_count": get_val("householdCount"),
         "buying_purpose": get_val("buyingPurpose").lower(),
         "project_source": get_val("projectSource").lower(),
+        "project_source_other": get_val("projectSourceOther", "project_source_other"),
         "has_bank_account": get_val("hasBankAccount", default="no").lower() == "yes",
         "bank_name": get_val("pbBankName", "auto_with_which_bank_s_1", "auto_with_which_bank_s_2"),
         "bank_account_type": get_val("bankAccountType").lower(),

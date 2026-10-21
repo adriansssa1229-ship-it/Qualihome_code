@@ -5493,3 +5493,127 @@ def print_buyer_information_sheet(trip_id):
         b=b
     )
 
+
+
+@main_bp.route("/dashboard/admin/tripping-report/print")
+@login_required
+def print_tripping_monitoring_report():
+    if current_user.role not in ("admin", "agent"):
+        abort(403)
+
+    today = date.today()
+    period = (request.args.get("period") or "this_week").lower()
+    start_date_str = (request.args.get("start_date") or "").strip()
+    end_date_str = (request.args.get("end_date") or "").strip()
+    prop_id = request.args.get("property_id")
+
+    start_date = None
+    end_date = None
+    coverage_label = ""
+
+    if period == "this_week":
+        # Monday is 0, Sunday is 6
+        start_date = today - timedelta(days=today.weekday())
+        end_date = start_date + timedelta(days=6)
+        coverage_label = f"{start_date.strftime('%B %d, %Y')} – {end_date.strftime('%B %d, %Y')} (This Week)"
+    elif period == "today":
+        start_date = today
+        end_date = today
+        coverage_label = f"{today.strftime('%B %d, %Y')} (Today Only)"
+    elif period == "custom":
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                start_date = None
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                end_date = None
+
+        if start_date and end_date:
+            coverage_label = f"{start_date.strftime('%B %d, %Y')} – {end_date.strftime('%B %d, %Y')}"
+        elif start_date:
+            coverage_label = f"From {start_date.strftime('%B %d, %Y')}"
+        elif end_date:
+            coverage_label = f"Until {end_date.strftime('%B %d, %Y')}"
+        else:
+            coverage_label = "All Dates"
+    else:
+        coverage_label = "All Time"
+
+    query = TrippingRequest.query.join(Property, TrippingRequest.property_id == Property.id) \
+        .filter(TrippingRequest.status.in_(["approved", "visited"])) \
+        .filter(~TrippingRequest.sale_record.has())
+
+    if start_date:
+        query = query.filter(TrippingRequest.preferred_date >= start_date)
+    if end_date:
+        query = query.filter(TrippingRequest.preferred_date <= end_date)
+
+    selected_property = None
+    if prop_id and prop_id not in ("", "all"):
+        try:
+            pid = int(prop_id)
+            query = query.filter(TrippingRequest.property_id == pid)
+            selected_property = Property.query.get(pid)
+        except (ValueError, TypeError):
+            pass
+
+    trips = query.order_by(
+        Property.name.asc(),
+        TrippingRequest.preferred_date.asc(),
+        TrippingRequest.preferred_time.asc()
+    ).all()
+
+    # Summary Statistics (Operational Dispatch: Approved & Visited Only)
+    total_trips = len(trips)
+    status_counts = {
+        "approved": 0,
+        "visited": 0,
+    }
+    model_counts = {}
+
+    for t in trips:
+        raw_st = (t.status or "").lower()
+        if raw_st in status_counts:
+            status_counts[raw_st] += 1
+
+        pname = t.property_item.name if t.property_item else "Other Properties"
+        model_counts[pname] = model_counts.get(pname, 0) + 1
+
+    top_model = "—"
+    top_model_count = 0
+    if model_counts:
+        sorted_models = sorted(model_counts.items(), key=lambda x: x[1], reverse=True)
+        top_model = sorted_models[0][0]
+        top_model_count = sorted_models[0][1]
+
+    # Group trips by property model
+    grouped_trips = {}
+    for t in trips:
+        prop = t.property_item
+        prop_key = prop.name if prop else "Other Properties"
+        if prop_key not in grouped_trips:
+            grouped_trips[prop_key] = {
+                "property": prop,
+                "trips": []
+            }
+        grouped_trips[prop_key]["trips"].append(t)
+
+    now_manila = datetime.now()
+
+    return render_template(
+        "dashboard/tripping_monitoring_report_print.html",
+        trips=trips,
+        grouped_trips=grouped_trips,
+        total_trips=total_trips,
+        status_counts=status_counts,
+        top_model=top_model,
+        top_model_count=top_model_count,
+        coverage_label=coverage_label,
+        selected_property=selected_property,
+        now_manila=now_manila,
+        admin_user=current_user
+    )

@@ -5994,42 +5994,317 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
     new bootstrap.Modal(document.getElementById('c50FactorsModal')).show();
   };
 
-  /* -- Training data: search + filter -- */
-  function filterTdTable() {
+  /* -- Training data & Historical Buyer records: search + filter with pagination (20 per page) -- */
+  var tdPagination = {
+    currentPage: 1,
+    pageSize: 20
+  };
+
+  function renderTdPagination(totalMatching, totalPages) {
+    var wrapEl = document.getElementById('tdPaginationWrap');
+    var infoEl = document.getElementById('tdPaginationInfo');
+    var listEl = document.getElementById('tdPaginationList');
+    if (!wrapEl || !infoEl || !listEl) return;
+
+    var totalAll = document.querySelectorAll('#tdTable tbody tr[id^="td-row-"]').length;
+    if (totalAll === 0) {
+      wrapEl.style.display = 'none';
+      return;
+    }
+    wrapEl.style.display = '';
+
+    if (totalMatching === 0) {
+      infoEl.textContent = 'No matching records found';
+      listEl.innerHTML = '';
+      return;
+    }
+
+    var start = (tdPagination.currentPage - 1) * tdPagination.pageSize + 1;
+    var end = Math.min(tdPagination.currentPage * tdPagination.pageSize, totalMatching);
+    infoEl.textContent = 'Showing ' + start + '–' + end + ' of ' + totalMatching + ' records';
+
+    if (totalPages <= 1) {
+      listEl.innerHTML = '';
+      return;
+    }
+
+    var html = '';
+
+    var prevDisabled = tdPagination.currentPage <= 1;
+    html += '<li class="page-item ' + (prevDisabled ? 'disabled' : '') + '">'
+          + '<button class="page-link" type="button" data-page="' + (tdPagination.currentPage - 1) + '" ' + (prevDisabled ? 'tabindex="-1" aria-disabled="true"' : '') + '>'
+          + '<i class="fas fa-chevron-left me-1"></i>Prev</button></li>';
+
+    var pages = [];
+    if (totalPages <= 7) {
+      for (var p = 1; p <= totalPages; p++) pages.push(p);
+    } else {
+      pages.push(1);
+      if (tdPagination.currentPage > 3) pages.push('...');
+      var startP = Math.max(2, tdPagination.currentPage - 1);
+      var endP   = Math.min(totalPages - 1, tdPagination.currentPage + 1);
+      for (var p = startP; p <= endP; p++) pages.push(p);
+      if (tdPagination.currentPage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+
+    for (var i = 0; i < pages.length; i++) {
+      var item = pages[i];
+      if (item === '...') {
+        html += '<li class="page-item ellipsis disabled"><span class="page-link">&hellip;</span></li>';
+      } else {
+        var isActive = item === tdPagination.currentPage;
+        html += '<li class="page-item ' + (isActive ? 'active' : '') + '">'
+              + '<button class="page-link" type="button" data-page="' + item + '">' + item + '</button></li>';
+      }
+    }
+
+    var nextDisabled = tdPagination.currentPage >= totalPages;
+    html += '<li class="page-item ' + (nextDisabled ? 'disabled' : '') + '">'
+          + '<button class="page-link" type="button" data-page="' + (tdPagination.currentPage + 1) + '" ' + (nextDisabled ? 'tabindex="-1" aria-disabled="true"' : '') + '>'
+          + 'Next<i class="fas fa-chevron-right ms-1"></i></button></li>';
+
+    listEl.innerHTML = html;
+
+    listEl.querySelectorAll('button[data-page]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var targetPage = parseInt(this.getAttribute('data-page'), 10);
+        if (targetPage && targetPage !== tdPagination.currentPage && targetPage >= 1 && targetPage <= totalPages) {
+          tdPagination.currentPage = targetPage;
+          applyTdPagination();
+          var card = document.getElementById('c50TabTraining');
+          if (card) {
+            var rect = card.getBoundingClientRect();
+            if (rect.top < 0 || rect.top > 300) {
+              card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        }
+      });
+    });
+  }
+
+  function applyTdPagination() {
     var q = (document.getElementById('tdSearch') || {value:''}).value.toLowerCase();
     var o = (document.getElementById('tdFilterOutcome') || {value:''}).value;
-    var visible = 0;
-    document.querySelectorAll('#tdTable tbody tr[id^="td-row-"]').forEach(function(row) {
-      var match = (!q || row.textContent.toLowerCase().includes(q)) && (!o || (row.dataset.outcome || '') === o);
-      row.style.display = match ? '' : 'none';
-      if (match) visible++;
-    });
-    var noRes = document.getElementById('td-no-results-row');
-    var total = document.querySelectorAll('#tdTable tbody tr[id^="td-row-"]').length;
-    if (noRes) noRes.style.display = (visible === 0 && total > 0) ? '' : 'none';
-  }
-  var tdSrch = document.getElementById('tdSearch');
-  if (tdSrch) tdSrch.addEventListener('input', filterTdTable);
-  var tdFiltOut = document.getElementById('tdFilterOutcome');
-  if (tdFiltOut) tdFiltOut.addEventListener('change', filterTdTable);
 
-  function filterTdHistoryTable() {
+    var rows = Array.from(document.querySelectorAll('#tdTable tbody tr[id^="td-row-"]'));
+    var matching = [];
+
+    rows.forEach(function(row) {
+      var match = (!q || row.textContent.toLowerCase().includes(q)) && (!o || (row.dataset.outcome || '') === o);
+      if (match) {
+        matching.push(row);
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    var totalMatching = matching.length;
+    var totalPages = Math.ceil(totalMatching / tdPagination.pageSize) || 1;
+
+    if (tdPagination.currentPage > totalPages) {
+      tdPagination.currentPage = totalPages;
+    }
+    if (tdPagination.currentPage < 1) {
+      tdPagination.currentPage = 1;
+    }
+
+    var startIndex = (tdPagination.currentPage - 1) * tdPagination.pageSize;
+    var endIndex = startIndex + tdPagination.pageSize;
+
+    matching.forEach(function(row, idx) {
+      if (idx >= startIndex && idx < endIndex) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    var noRes = document.getElementById('td-no-results-row');
+    if (noRes) {
+      noRes.style.display = (totalMatching === 0 && rows.length > 0) ? '' : 'none';
+    }
+
+    renderTdPagination(totalMatching, totalPages);
+  }
+
+  function filterTdTable(resetPage) {
+    if (resetPage !== false) {
+      tdPagination.currentPage = 1;
+    }
+    applyTdPagination();
+  }
+
+  var tdSrch = document.getElementById('tdSearch');
+  if (tdSrch) tdSrch.addEventListener('input', function() { filterTdTable(true); });
+  var tdFiltOut = document.getElementById('tdFilterOutcome');
+  if (tdFiltOut) tdFiltOut.addEventListener('change', function() { filterTdTable(true); });
+
+  var tdhPagination = {
+    currentPage: 1,
+    pageSize: 20
+  };
+
+  function renderTdhPagination(totalMatching, totalPages) {
+    var wrapEl = document.getElementById('tdhPaginationWrap');
+    var infoEl = document.getElementById('tdhPaginationInfo');
+    var listEl = document.getElementById('tdhPaginationList');
+    if (!wrapEl || !infoEl || !listEl) return;
+
+    var totalAll = document.querySelectorAll('#tdHistoryTable tbody tr[id^="tdh-row-"]').length;
+    if (totalAll === 0) {
+      wrapEl.style.display = 'none';
+      return;
+    }
+    wrapEl.style.display = '';
+
+    if (totalMatching === 0) {
+      infoEl.textContent = 'No matching records found';
+      listEl.innerHTML = '';
+      return;
+    }
+
+    var start = (tdhPagination.currentPage - 1) * tdhPagination.pageSize + 1;
+    var end = Math.min(tdhPagination.currentPage * tdhPagination.pageSize, totalMatching);
+    infoEl.textContent = 'Showing ' + start + '–' + end + ' of ' + totalMatching + ' records';
+
+    if (totalPages <= 1) {
+      listEl.innerHTML = '';
+      return;
+    }
+
+    var html = '';
+
+    var prevDisabled = tdhPagination.currentPage <= 1;
+    html += '<li class="page-item ' + (prevDisabled ? 'disabled' : '') + '">'
+          + '<button class="page-link" type="button" data-page="' + (tdhPagination.currentPage - 1) + '" ' + (prevDisabled ? 'tabindex="-1" aria-disabled="true"' : '') + '>'
+          + '<i class="fas fa-chevron-left me-1"></i>Prev</button></li>';
+
+    var pages = [];
+    if (totalPages <= 7) {
+      for (var p = 1; p <= totalPages; p++) pages.push(p);
+    } else {
+      pages.push(1);
+      if (tdhPagination.currentPage > 3) pages.push('...');
+      var startP = Math.max(2, tdhPagination.currentPage - 1);
+      var endP   = Math.min(totalPages - 1, tdhPagination.currentPage + 1);
+      for (var p = startP; p <= endP; p++) pages.push(p);
+      if (tdhPagination.currentPage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+
+    for (var i = 0; i < pages.length; i++) {
+      var item = pages[i];
+      if (item === '...') {
+        html += '<li class="page-item ellipsis disabled"><span class="page-link">&hellip;</span></li>';
+      } else {
+        var isActive = item === tdhPagination.currentPage;
+        html += '<li class="page-item ' + (isActive ? 'active' : '') + '">'
+              + '<button class="page-link" type="button" data-page="' + item + '">' + item + '</button></li>';
+      }
+    }
+
+    var nextDisabled = tdhPagination.currentPage >= totalPages;
+    html += '<li class="page-item ' + (nextDisabled ? 'disabled' : '') + '">'
+          + '<button class="page-link" type="button" data-page="' + (tdhPagination.currentPage + 1) + '" ' + (nextDisabled ? 'tabindex="-1" aria-disabled="true"' : '') + '>'
+          + 'Next<i class="fas fa-chevron-right ms-1"></i></button></li>';
+
+    listEl.innerHTML = html;
+
+    listEl.querySelectorAll('button[data-page]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var targetPage = parseInt(this.getAttribute('data-page'), 10);
+        if (targetPage && targetPage !== tdhPagination.currentPage && targetPage >= 1 && targetPage <= totalPages) {
+          tdhPagination.currentPage = targetPage;
+          applyTdhPagination();
+          var card = document.getElementById('c50TabHistory');
+          if (card) {
+            var rect = card.getBoundingClientRect();
+            if (rect.top < 0 || rect.top > 300) {
+              card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        }
+      });
+    });
+  }
+
+  function applyTdhPagination() {
     var q = (document.getElementById('tdHistorySearch') || {value:''}).value.toLowerCase();
     var o = (document.getElementById('tdHistoryFilterOutcome') || {value:''}).value;
-    var visible = 0;
-    document.querySelectorAll('#tdHistoryTable tbody tr[id^="tdh-row-"]').forEach(function(row) {
+
+    var rows = Array.from(document.querySelectorAll('#tdHistoryTable tbody tr[id^="tdh-row-"]'));
+    var matching = [];
+
+    rows.forEach(function(row) {
       var match = (!q || row.textContent.toLowerCase().includes(q)) && (!o || (row.dataset.outcome || '') === o);
-      row.style.display = match ? '' : 'none';
-      if (match) visible++;
+      if (match) {
+        matching.push(row);
+      } else {
+        row.style.display = 'none';
+      }
     });
+
+    var totalMatching = matching.length;
+    var totalPages = Math.ceil(totalMatching / tdhPagination.pageSize) || 1;
+
+    if (tdhPagination.currentPage > totalPages) {
+      tdhPagination.currentPage = totalPages;
+    }
+    if (tdhPagination.currentPage < 1) {
+      tdhPagination.currentPage = 1;
+    }
+
+    var startIndex = (tdhPagination.currentPage - 1) * tdhPagination.pageSize;
+    var endIndex = startIndex + tdhPagination.pageSize;
+
+    matching.forEach(function(row, idx) {
+      if (idx >= startIndex && idx < endIndex) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
     var noRes = document.getElementById('tdh-no-results-row');
-    var total = document.querySelectorAll('#tdHistoryTable tbody tr[id^="tdh-row-"]').length;
-    if (noRes) noRes.style.display = (visible === 0 && total > 0) ? '' : 'none';
+    if (noRes) {
+      noRes.style.display = (totalMatching === 0 && rows.length > 0) ? '' : 'none';
+    }
+
+    renderTdhPagination(totalMatching, totalPages);
   }
+
+  function filterTdHistoryTable(resetPage) {
+    if (resetPage !== false) {
+      tdhPagination.currentPage = 1;
+    }
+    applyTdhPagination();
+  }
+
   var tdHistSrch = document.getElementById('tdHistorySearch');
-  if (tdHistSrch) tdHistSrch.addEventListener('input', filterTdHistoryTable);
+  if (tdHistSrch) tdHistSrch.addEventListener('input', function() { filterTdHistoryTable(true); });
   var tdHistFilt = document.getElementById('tdHistoryFilterOutcome');
-  if (tdHistFilt) tdHistFilt.addEventListener('change', filterTdHistoryTable);
+  if (tdHistFilt) tdHistFilt.addEventListener('change', function() { filterTdHistoryTable(true); });
+
+  // Initial pagination execution for both tabs
+  applyTdPagination();
+  applyTdhPagination();
+
+  // Tab listener to ensure layout refresh when tab switches
+  var c50TabsEl = document.getElementById('c50Tabs');
+  if (c50TabsEl) {
+    c50TabsEl.addEventListener('shown.bs.tab', function(e) {
+      var href = e.target ? e.target.getAttribute('href') : '';
+      if (href === '#c50TabHistory') {
+        applyTdhPagination();
+      } else if (href === '#c50TabTraining') {
+        applyTdPagination();
+      }
+    });
+  }
 
   /* -- Add training record: live validation -- */
   function _tdValidate(isSubmit) {
@@ -6217,7 +6492,7 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
       var row = document.getElementById('td-row-' + id);
       if (row) row.remove();
       _updateModelBar(d.meta);
-      filterTdTable();
+      filterTdTable(false);
     })
     .catch(function() { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash me-1"></i>Delete'; });
   });
@@ -6304,7 +6579,7 @@ document.getElementById('saveCriteriaConfirmBtn') && document.getElementById('sa
       cells[7].innerHTML   = '<span class="fw-semibold ' + dtiC + '">' + dtiR.toFixed(1) + '%</span>';
       cells[8].innerHTML   = '<span class="sqh-badge ' + outB + '">' + outT + '</span>';
       _updateModelBar(d.meta);
-      filterTdTable();
+      filterTdTable(false);
     })
     .catch(function() { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Save Changes'; });
   });
@@ -7115,45 +7390,244 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
 (function () {
   var tripsSearch = document.getElementById('adminTripsSearch');
   var tripsFilter = document.getElementById('adminTripsFilterStatus');
+  var tripsPageSize = document.getElementById('adminTripsPageSize');
+  var tripsPillContainer = document.getElementById('adminTripsStatusPills');
   var _tripActionState = { action: '', tripId: '' };
   var _adminTrmImages = [];
   var _adminTrmIdx = 0;
 
-  function filterAdminTrips() {
+  var adminTripsState = {
+    currentPage: 1,
+    pageSize: 10
+  };
+
+  function _updateTripStatusCounts() {
     var table = document.getElementById('adminTripsTable');
     if (!table) return;
-    var q = tripsSearch ? String(tripsSearch.value || '').toLowerCase().trim() : '';
-    var s = tripsFilter ? String(tripsFilter.value || '').toLowerCase().trim() : '';
     var rows = table.querySelectorAll('tbody tr[id^="admin-trip-row-"]');
-    var visible = 0;
-    rows.forEach(function (row) {
-      var text = row.textContent.toLowerCase();
-      var status = String(row.getAttribute('data-status') || '').toLowerCase();
-      var show = (!q || text.indexOf(q) !== -1) && (!s || status === s);
-      row.style.display = show ? '' : 'none';
-      if (show) visible += 1;
+    var counts = {
+      all: rows.length,
+      pending: 0,
+      approved: 0,
+      visited: 0,
+      sold: 0,
+      rejected: 0
+    };
+    rows.forEach(function (r) {
+      var st = String(r.getAttribute('data-status') || '').toLowerCase().trim();
+      if (counts.hasOwnProperty(st)) {
+        counts[st]++;
+      }
     });
-    var noResults = document.getElementById('adminTripsNoResults');
-    if (noResults) noResults.classList.toggle('d-none', visible > 0);
+
+    var elAll = document.getElementById('tripCountAll');
+    var elPending = document.getElementById('tripCountPending');
+    var elApproved = document.getElementById('tripCountApproved');
+    var elVisited = document.getElementById('tripCountVisited');
+    var elSold = document.getElementById('tripCountSold');
+    var elRejected = document.getElementById('tripCountRejected');
+
+    if (elAll) elAll.textContent = counts.all;
+    if (elPending) elPending.textContent = counts.pending;
+    if (elApproved) elApproved.textContent = counts.approved;
+    if (elVisited) elVisited.textContent = counts.visited;
+    if (elSold) elSold.textContent = counts.sold;
+    if (elRejected) elRejected.textContent = counts.rejected;
   }
 
-  if (tripsSearch) tripsSearch.addEventListener('input', filterAdminTrips);
-  if (tripsFilter) tripsFilter.addEventListener('change', filterAdminTrips);
+  function renderAdminTripsPagination(totalMatching, totalPages, totalAll) {
+    var wrapEl = document.getElementById('adminTripsPaginationWrap');
+    var infoEl = document.getElementById('adminTripsPaginationInfo');
+    var listEl = document.getElementById('adminTripsPaginationList');
+    if (!wrapEl || !infoEl || !listEl) return;
+
+    if (totalAll === 0) {
+      wrapEl.style.display = 'none';
+      return;
+    }
+    wrapEl.style.display = '';
+
+    if (totalMatching === 0) {
+      infoEl.textContent = 'Showing 0 to 0 of 0 entries';
+      listEl.innerHTML = '';
+      return;
+    }
+
+    var start = (adminTripsState.currentPage - 1) * adminTripsState.pageSize + 1;
+    var end = Math.min(adminTripsState.currentPage * adminTripsState.pageSize, totalMatching);
+    infoEl.textContent = 'Showing ' + start + ' to ' + end + ' of ' + totalMatching + ' entries';
+
+    if (totalPages <= 1) {
+      listEl.innerHTML = '';
+      return;
+    }
+
+    var html = '';
+
+    // Previous button
+    var prevDisabled = adminTripsState.currentPage <= 1;
+    html += '<li class="page-item ' + (prevDisabled ? 'disabled' : '') + '">'
+          + '<button class="page-link" type="button" data-page="' + (adminTripsState.currentPage - 1) + '" ' + (prevDisabled ? 'tabindex="-1" aria-disabled="true"' : '') + '>'
+          + '<i class="fas fa-chevron-left me-1"></i>Previous</button></li>';
+
+    // Dynamic page numbers
+    var pages = [];
+    if (totalPages <= 7) {
+      for (var p = 1; p <= totalPages; p++) pages.push(p);
+    } else {
+      pages.push(1);
+      if (adminTripsState.currentPage > 3) pages.push('...');
+      var startP = Math.max(2, adminTripsState.currentPage - 1);
+      var endP   = Math.min(totalPages - 1, adminTripsState.currentPage + 1);
+      for (var p = startP; p <= endP; p++) pages.push(p);
+      if (adminTripsState.currentPage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+
+    for (var i = 0; i < pages.length; i++) {
+      var item = pages[i];
+      if (item === '...') {
+        html += '<li class="page-item ellipsis disabled"><span class="page-link">&hellip;</span></li>';
+      } else {
+        var isActive = item === adminTripsState.currentPage;
+        html += '<li class="page-item ' + (isActive ? 'active' : '') + '">'
+              + '<button class="page-link" type="button" data-page="' + item + '">' + item + '</button></li>';
+      }
+    }
+
+    // Next button
+    var nextDisabled = adminTripsState.currentPage >= totalPages;
+    html += '<li class="page-item ' + (nextDisabled ? 'disabled' : '') + '">'
+          + '<button class="page-link" type="button" data-page="' + (adminTripsState.currentPage + 1) + '" ' + (nextDisabled ? 'tabindex="-1" aria-disabled="true"' : '') + '>'
+          + 'Next<i class="fas fa-chevron-right ms-1"></i></button></li>';
+
+    listEl.innerHTML = html;
+
+    listEl.querySelectorAll('button[data-page]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var targetPage = parseInt(this.getAttribute('data-page'), 10);
+        if (targetPage && targetPage !== adminTripsState.currentPage && targetPage >= 1 && targetPage <= totalPages) {
+          adminTripsState.currentPage = targetPage;
+          filterAdminTrips(false);
+          var tableWrap = document.getElementById('page-trips');
+          if (tableWrap) {
+            var rect = tableWrap.getBoundingClientRect();
+            if (rect.top < 0 || rect.top > 300) {
+              tableWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        }
+      });
+    });
+  }
+
+  function filterAdminTrips(resetPage) {
+    var table = document.getElementById('adminTripsTable');
+    if (!table) return;
+
+    if (resetPage !== false) {
+      adminTripsState.currentPage = 1;
+    }
+
+    var q = tripsSearch ? String(tripsSearch.value || '').toLowerCase().trim() : '';
+    var s = tripsFilter ? String(tripsFilter.value || '').toLowerCase().trim() : '';
+
+    var rows = Array.from(table.querySelectorAll('tbody tr[id^="admin-trip-row-"]'));
+    var matching = [];
+
+    rows.forEach(function (row) {
+      var text = row.textContent.toLowerCase();
+      var status = String(row.getAttribute('data-status') || '').toLowerCase().trim();
+      var show = (!q || text.indexOf(q) !== -1) && (!s || status === s);
+      if (show) {
+        matching.push(row);
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    var totalMatching = matching.length;
+    var totalPages = Math.ceil(totalMatching / adminTripsState.pageSize) || 1;
+
+    if (adminTripsState.currentPage > totalPages) adminTripsState.currentPage = totalPages;
+    if (adminTripsState.currentPage < 1) adminTripsState.currentPage = 1;
+
+    var startIndex = (adminTripsState.currentPage - 1) * adminTripsState.pageSize;
+    var endIndex = startIndex + adminTripsState.pageSize;
+
+    matching.forEach(function (row, idx) {
+      if (idx >= startIndex && idx < endIndex) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    var noResults = document.getElementById('adminTripsNoResults');
+    if (noResults) noResults.classList.toggle('d-none', totalMatching > 0 || rows.length === 0);
+
+    renderAdminTripsPagination(totalMatching, totalPages, rows.length);
+  }
+
+  if (tripsSearch) tripsSearch.addEventListener('input', function () { filterAdminTrips(true); });
+  if (tripsFilter) {
+    tripsFilter.addEventListener('change', function () {
+      var val = this.value || '';
+      if (tripsPillContainer) {
+        tripsPillContainer.querySelectorAll('.sqh-status-pill').forEach(function (p) {
+          p.classList.toggle('active', (p.getAttribute('data-status') || '') === val);
+        });
+      }
+      filterAdminTrips(true);
+    });
+  }
+
+  if (tripsPageSize) {
+    tripsPageSize.addEventListener('change', function () {
+      adminTripsState.pageSize = parseInt(this.value, 10) || 10;
+      filterAdminTrips(true);
+    });
+  }
+
+  if (tripsPillContainer) {
+    tripsPillContainer.addEventListener('click', function (e) {
+      var pill = e.target.closest('.sqh-status-pill');
+      if (!pill) return;
+      e.preventDefault();
+      var targetStatus = pill.getAttribute('data-status') || '';
+      tripsPillContainer.querySelectorAll('.sqh-status-pill').forEach(function (p) {
+        p.classList.remove('active');
+      });
+      pill.classList.add('active');
+
+      if (tripsFilter) {
+        tripsFilter.value = targetStatus;
+      }
+      filterAdminTrips(true);
+    });
+  }
 
   function removeTripRow(tripId) {
     var row = document.getElementById('admin-trip-row-' + tripId);
     if (row) row.remove();
+    _updateTripStatusCounts();
     var table = document.getElementById('adminTripsTable');
     if (!table) return;
     var left = table.querySelectorAll('tbody tr[id^="admin-trip-row-"]').length;
-    if (left > 0) return;
+    if (left > 0) {
+      filterAdminTrips(false);
+      return;
+    }
     var wrap = table.closest('.table-responsive');
     var noResults = document.getElementById('adminTripsNoResults');
+    var pagWrap = document.getElementById('adminTripsPaginationWrap');
     if (noResults) noResults.classList.add('d-none');
+    if (pagWrap) pagWrap.style.display = 'none';
     if (wrap) {
       wrap.innerHTML = ''
         + '<div class="text-center py-5 text-muted" id="adminTripQueueEmpty">'
-        + '  <i class="fas fa-check-circle fa-2x mb-2 d-block" style="color:var(--clr-accent);"></i>'
+        + '  <i class="fas fa-check-circle fa-2x mb-2 d-block" style="color:var(--clr-accent);">'
         + '  <span class="fw-semibold d-block mb-1">No tripping requests yet.</span>'
         + '  <span class="small">New requests will appear here once clients submit them.</span>'
         + '</div>';
@@ -7162,10 +7636,11 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
 
   function _tripBadgeHtml(status) {
     status = String(status || '').toLowerCase();
-    if (status === 'approved') return '<span class="sqh-badge badge-qualified">Approved</span>';
-    if (status === 'sold') return '<span class="sqh-badge badge-not-qualified">Sold</span>';
-    if (status === 'rejected') return '<span class="sqh-badge badge-not-qualified">Rejected</span>';
-    return '<span class="sqh-badge badge-conditional">Pending</span>';
+    if (status === 'approved') return '<span class="sqh-badge badge-approved">Approved</span>';
+    if (status === 'visited') return '<span class="sqh-badge badge-visited">Visited</span>';
+    if (status === 'sold') return '<span class="sqh-badge badge-sold">Sold</span>';
+    if (status === 'rejected') return '<span class="sqh-badge badge-rejected">Rejected</span>';
+    return '<span class="sqh-badge badge-pending">Pending</span>';
   }
 
   function _setAdminTripModalStatus(status) {
@@ -7173,9 +7648,11 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
     if (!badgeEl) return;
     var s = String(status || 'pending').toLowerCase();
     var text = s.charAt(0).toUpperCase() + s.slice(1);
-    var cls = 'badge-conditional';
-    if (s === 'approved') cls = 'badge-qualified';
-    else if (s === 'sold' || s === 'rejected') cls = 'badge-not-qualified';
+    var cls = 'badge-pending';
+    if (s === 'approved') cls = 'badge-approved';
+    else if (s === 'visited') cls = 'badge-visited';
+    else if (s === 'sold') cls = 'badge-sold';
+    else if (s === 'rejected') cls = 'badge-rejected';
     badgeEl.className = 'sqh-badge ' + cls;
     badgeEl.textContent = text;
   }
@@ -7464,60 +7941,40 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
     row.setAttribute('data-agent-note', String(note || 'No note provided.'));
 
     var cells = row.querySelectorAll('td');
-    if (!cells || cells.length < 10) return;
+    if (!cells || cells.length < 7) return;
 
-    var tripStatusCell = cells[5];
-    var visitStatusCell = cells[6];
-    var assignCell = cells[7];
-    var noteCell = cells[8];
-    var actionCell = cells[9];
+    var agentCell = cells[4];
+    var statusCell = cells[5];
+    var actionCell = cells[6];
 
-    if (tripStatusCell) tripStatusCell.innerHTML = _tripBadgeHtml(status);
-    if (visitStatusCell) {
-      if (status === 'visited' || status === 'sold') {
-        visitStatusCell.innerHTML = '<span class="sqh-badge badge-qualified">Visited</span>';
-      } else {
-        visitStatusCell.innerHTML = '<span class="sqh-badge badge-conditional">Pending</span>';
-      }
+    if (statusCell) {
+      statusCell.innerHTML = _tripBadgeHtml(status);
     }
 
-    if (assignCell) {
+    if (agentCell) {
       var labelEl = document.getElementById('tripAssignAgentLabel-' + tripId);
       var selectedLabel = labelEl ? String(labelEl.textContent || '').trim() : '';
       var hiddenAssign = document.getElementById('tripAssignAgent-' + tripId);
       if (status === 'rejected') {
         if (hiddenAssign) hiddenAssign.value = '';
         if (labelEl) labelEl.textContent = '';
-        assignCell.innerHTML = '<span class="small fw-semibold text-dark">—</span>';
+        agentCell.innerHTML = '<span class="small fw-semibold text-dark">—</span>';
       } else {
-        assignCell.innerHTML = '<span class="small fw-semibold text-dark">' + (selectedLabel || '—') + '</span>';
+        agentCell.innerHTML = '<span class="small fw-semibold text-dark">' + (selectedLabel || '—') + '</span>';
       }
     }
 
-    var safeNote = String(note || '—')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-    if (noteCell) noteCell.innerHTML = '<span class="text-muted small">' + safeNote + '</span>';
-
     if (actionCell) {
-      var clientId = String(row.getAttribute('data-client-id') || '').trim();
       var propId = String(row.getAttribute('data-property-id') || '').trim();
-      var propBtnHtml = '  <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="' + propId + '" title="View House Details">'
-        + '    <i class="fas fa-home"></i>'
-        + '  </button>';
+      var clientId = String(row.getAttribute('data-client-id') || '').trim();
+      var noteInputHtml = '<input type="hidden" id="tripNote-' + tripId + '" value="' + (String(note || '').replace(/"/g, '&quot;')) + '">';
+
       if (status === 'approved') {
-        actionCell.innerHTML = ''
-          + '<div class="d-flex gap-1">'
+        actionCell.innerHTML = noteInputHtml
+          + '<div class="d-flex gap-1 flex-wrap">'
           + '  <button type="button" class="btn btn-sm btn-outline-blue admin-trip-visit-btn" data-trip-id="' + String(tripId || '') + '" title="Mark as Visited">'
           + '    <i class="fas fa-map-marked-alt"></i>'
           + '  </button>'
-          + '  <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="' + clientId + '" title="View Client Details">'
-          + '    <i class="fas fa-user"></i>'
-          + '  </button>'
-          + propBtnHtml
           + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
           + '    <i class="fas fa-clipboard-list"></i>'
           + '  </button>'
@@ -7526,23 +7983,16 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
           + '  </button>'
           + '</div>';
       } else if (status === 'sold') {
-        actionCell.innerHTML = ''
-          + '<div class="d-flex gap-1">'
-          + '  <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="' + clientId + '" title="View Client Details">'
-          + '    <i class="fas fa-user"></i>'
-          + '  </button>'
-          + propBtnHtml
+        actionCell.innerHTML = noteInputHtml
+          + '<div class="d-flex gap-1 flex-wrap">'
           + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
           + '    <i class="fas fa-clipboard-list"></i>'
           + '  </button>'
           + '</div>';
       } else {
-        actionCell.innerHTML = ''
-          + '<div class="d-flex gap-1">'
-          + '  <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="' + clientId + '" title="View Client Details">'
-          + '    <i class="fas fa-user"></i>'
-          + '  </button>'
-          + propBtnHtml
+        // visited or rejected
+        actionCell.innerHTML = noteInputHtml
+          + '<div class="d-flex gap-1 flex-wrap">'
           + '  <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="' + String(tripId || '') + '" title="View Trip Request">'
           + '    <i class="fas fa-clipboard-list"></i>'
           + '  </button>'
@@ -7552,6 +8002,9 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
           + '</div>';
       }
     }
+
+    _updateTripStatusCounts();
+    filterAdminTrips(false);
   }
 
   function _openAssignModal(tripId) {
@@ -7749,7 +8202,8 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
 
         _tripActionState.action = '';
         _tripActionState.tripId = '';
-        filterAdminTrips();
+        _updateTripStatusCounts();
+        filterAdminTrips(false);
       })
       .catch(function () {
         btn.disabled = false;
@@ -7853,6 +8307,64 @@ var _adminPreviewType = null; // 'avatar' or 'banner'
     _adminTrmShowSlide(_adminTrmIdx + 1);
   });
 
+  // Open Tripping Report Export Modal
+  var openReportModalBtn = document.getElementById('adminOpenTrippingReportModalBtn');
+  var reportModalEl = document.getElementById('adminExportTrippingReportModal');
+  if (openReportModalBtn && reportModalEl) {
+    openReportModalBtn.addEventListener('click', function () {
+      bootstrap.Modal.getOrCreateInstance(reportModalEl).show();
+    });
+  }
+
+  // Radio toggle for custom date range
+  var periodRadios = document.querySelectorAll('input[name="adminTrReportPeriod"]');
+  var customDatesWrap = document.getElementById('adminTrReportCustomDates');
+  if (periodRadios && customDatesWrap) {
+    periodRadios.forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        var isCustom = document.getElementById('adminTrReportPeriodCustom')?.checked;
+        customDatesWrap.classList.toggle('d-none', !isCustom);
+      });
+    });
+  }
+
+  // Generate & Print Report
+  var genReportBtn = document.getElementById('adminGenerateTrippingReportBtn');
+  if (genReportBtn) {
+    genReportBtn.addEventListener('click', function () {
+      var selectedPeriod = 'this_week';
+      var checkedRadio = document.querySelector('input[name="adminTrReportPeriod"]:checked');
+      if (checkedRadio) selectedPeriod = checkedRadio.value;
+
+      var startDate = (document.getElementById('adminTrReportStartDate')?.value || '').trim();
+      var endDate = (document.getElementById('adminTrReportEndDate')?.value || '').trim();
+      var propId = (document.getElementById('adminTrReportProperty')?.value || 'all').trim();
+
+      if (selectedPeriod === 'custom' && startDate && endDate && startDate > endDate) {
+        showToast('Start date cannot be after end date.', 'warning');
+        return;
+      }
+
+      var params = new URLSearchParams();
+      params.set('period', selectedPeriod);
+      if (selectedPeriod === 'custom') {
+        if (startDate) params.set('start_date', startDate);
+        if (endDate) params.set('end_date', endDate);
+      }
+      if (propId && propId !== 'all') {
+        params.set('property_id', propId);
+      }
+
+      var url = '/dashboard/admin/tripping-report/print?' + params.toString();
+      window.open(url, '_blank');
+
+      if (reportModalEl) {
+        bootstrap.Modal.getInstance(reportModalEl)?.hide();
+      }
+    });
+  }
+
+  _updateTripStatusCounts();
   filterAdminTrips();
 }());
 

@@ -2868,10 +2868,32 @@
          data-subtitle="Admin assigns available agents and decides each request.">
 
       <div class="sqh-card p-4">
+        <!-- Status Pills / Quick Filter Tabs -->
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3" id="adminTripsStatusPills">
+          <button type="button" class="btn btn-sm sqh-status-pill active" data-status="">
+            All <span class="badge bg-secondary ms-1" id="tripCountAll">{{ pending_trip_requests|length }}</span>
+          </button>
+          <button type="button" class="btn btn-sm sqh-status-pill pill-pending" data-status="pending">
+            <i class="fas fa-hourglass-half me-1"></i>Pending <span class="badge ms-1" id="tripCountPending">0</span>
+          </button>
+          <button type="button" class="btn btn-sm sqh-status-pill pill-approved" data-status="approved">
+            <i class="fas fa-calendar-check me-1"></i>Approved <span class="badge ms-1" id="tripCountApproved">0</span>
+          </button>
+          <button type="button" class="btn btn-sm sqh-status-pill pill-visited" data-status="visited">
+            <i class="fas fa-map-marked-alt me-1"></i>Visited <span class="badge ms-1" id="tripCountVisited">0</span>
+          </button>
+          <button type="button" class="btn btn-sm sqh-status-pill pill-sold" data-status="sold">
+            <i class="fas fa-handshake me-1"></i>Sold <span class="badge ms-1" id="tripCountSold">0</span>
+          </button>
+          <button type="button" class="btn btn-sm sqh-status-pill pill-rejected" data-status="rejected">
+            <i class="fas fa-times-circle me-1"></i>Rejected <span class="badge ms-1" id="tripCountRejected">0</span>
+          </button>
+        </div>
+
         <div class="dash-filter-bar mb-3">
           <div class="dash-fb-group">
             <label class="dash-fb-label"><i class="fas fa-search me-1"></i>Search</label>
-            <input type="text" id="adminTripsSearch" class="form-control dash-fb-input" placeholder="Client or property…">
+            <input type="text" id="adminTripsSearch" class="form-control dash-fb-input" placeholder="Search client, property, agent, schedule…">
           </div>
           <div class="dash-fb-group">
             <label class="dash-fb-label"><i class="fas fa-filter me-1"></i>Status</label>
@@ -2884,6 +2906,20 @@
               <option value="rejected">Rejected</option>
             </select>
           </div>
+          <div class="dash-fb-group" style="max-width: 140px; min-width: 110px;">
+            <label class="dash-fb-label"><i class="fas fa-list-ol me-1"></i>Show</label>
+            <select id="adminTripsPageSize" class="form-select dash-fb-select">
+              <option value="5">5 entries</option>
+              <option value="10" selected>10 entries</option>
+              <option value="25">25 entries</option>
+              <option value="50">50 entries</option>
+            </select>
+          </div>
+          <div class="d-flex align-items-end ms-auto">
+            <button type="button" class="btn btn-sm btn-outline-crimson" id="adminOpenTrippingReportModalBtn" title="Export Site Tripping Monitoring Report">
+              <i class="fas fa-file-pdf me-1"></i> Export Tripping Report
+            </button>
+          </div>
         </div>
 
         {% if pending_trip_requests %}
@@ -2891,16 +2927,13 @@
           <table class="table sqh-table" id="adminTripsTable">
             <thead>
               <tr>
-                <th class="hide-tablet">#</th>
+                <th class="hide-tablet" style="width: 50px;">#</th>
                 <th>Client</th>
                 <th>Property</th>
-                <th>Preferred Date</th>
-                <th class="hide-tablet">Time</th>
-                <th>Trip Status</th>
-                <th>Visit Status</th>
-                <th>Assign Agent (Available)</th>
-                <th>Admin Note</th>
-                <th>Actions</th>
+                <th>Schedule</th>
+                <th>Assigned Agent</th>
+                <th>Status</th>
+                <th style="min-width: 140px;">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -2910,7 +2943,7 @@
               {% set normalized_status = raw_status if raw_status in ['pending', 'approved', 'visited', 'rejected', 'sold'] else 'pending' %}
               {% set row_status = 'sold' if is_bought else normalized_status %}
               {% set av_agents = available_agents_by_trip.get(t.id, []) %}
-                <tr id="admin-trip-row-{{ t.id }}"
+              <tr id="admin-trip-row-{{ t.id }}"
                   data-status="{{ row_status }}"
                   data-client-id="{{ t.client.id if t.client else '' }}"
                   data-client-name="{{ t.client.full_name if t.client else 'Client' }}"
@@ -2923,79 +2956,63 @@
                   data-agent-note="{{ (t.agent_note or 'No note provided.')|e }}"
                   data-available-agents='{{ av_agents|tojson|forceescape }}'
                   data-preferred-date="{{ t.preferred_date.isoformat() if t.preferred_date else '' }}">
-                <td class="hide-tablet">{{ loop.index }}</td>
-                <td class="fw-semibold">{{ t.client.full_name if t.client else 'Client' }}</td>
-                <td>
+                <td class="hide-tablet" data-label="#">{{ loop.index }}</td>
+                <td data-label="Client">
+                  <a href="#" class="open-client-modal-btn text-dark text-decoration-none fw-semibold" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
+                    {{ t.client.full_name if t.client else 'Client' }}
+                  </a>
+                </td>
+                <td data-label="Property">
                   <a href="#" class="open-property-modal-btn text-dark text-decoration-none fw-semibold" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
                     {{ t.property_item.name if t.property_item else 'Property' }}
                   </a>
                 </td>
-                <td class="text-nowrap">{{ t.preferred_date.strftime('%b %d, %Y') if t.preferred_date else '—' }}</td>
-                <td class="hide-tablet">{{ (t.preferred_time|ph_time) if t.preferred_time else '—' }}</td>
-                <td>
-                  {% if row_status == 'approved' %}
-                  <span class="sqh-badge badge-qualified">Approved</span>
-                  {% elif row_status == 'visited' %}
-                  <span class="sqh-badge badge-qualified">Visited</span>
-                  {% elif row_status == 'sold' %}
-                  <span class="sqh-badge badge-sold">Sold</span>
-                  {% elif row_status == 'rejected' %}
-                  <span class="sqh-badge badge-not-qualified">Rejected</span>
-                  {% else %}
-                  <span class="sqh-badge badge-conditional">Pending</span>
-                  {% endif %}
+                <td data-label="Schedule" class="text-nowrap">
+                  <div class="fw-semibold text-dark">{{ t.preferred_date.strftime('%b %d, %Y') if t.preferred_date else '—' }}</div>
+                  <div class="text-muted small"><i class="far fa-clock me-1 text-primary"></i>{{ (t.preferred_time|ph_time) if t.preferred_time else '—' }}</div>
                 </td>
-                <td>
-                  {% if row_status in ['visited', 'sold'] %}
-                  <span class="sqh-badge badge-qualified">Visited</span>
-                  {% else %}
-                  <span class="sqh-badge badge-conditional">Pending</span>
-                  {% endif %}
-                </td>
-                <td style="min-width:220px;">
+                <td data-label="Assigned Agent" style="min-width:180px;">
                   {% if row_status == 'pending' %}
                     <input type="hidden" id="tripAssignAgent-{{ t.id }}" value="">
                     <button type="button" class="btn btn-sm btn-outline-blue admin-trip-open-assign-btn" data-trip-id="{{ t.id }}">
                       <i class="fas fa-calendar-alt me-1"></i>Choose Agent
                     </button>
-                    <div id="tripAssignAgentLabel-{{ t.id }}" class="fw-semibold text-dark mt-1"></div>
+                    <div id="tripAssignAgentLabel-{{ t.id }}" class="fw-semibold text-dark small mt-1"></div>
                   {% else %}
-                    <span class="fw-semibold text-dark">{{ t.property_item.agent.full_name if row_status in ['approved', 'visited', 'sold'] and t.property_item and t.property_item.agent else '—' }}</span>
+                    <span class="fw-semibold text-dark small">{{ t.property_item.agent.full_name if row_status in ['approved', 'visited', 'sold'] and t.property_item and t.property_item.agent else '—' }}</span>
                   {% endif %}
                 </td>
-                <td style="min-width:180px;">
-                  {% if row_status == 'pending' %}
-                  <input type="text" id="tripNote-{{ t.id }}" class="form-control form-control-sm" maxlength="255" placeholder="Optional note">
+                <td data-label="Status">
+                  {% if row_status == 'approved' %}
+                  <span class="sqh-badge badge-approved">Approved</span>
+                  {% elif row_status == 'visited' %}
+                  <span class="sqh-badge badge-visited">Visited</span>
+                  {% elif row_status == 'sold' %}
+                  <span class="sqh-badge badge-sold">Sold</span>
+                  {% elif row_status == 'rejected' %}
+                  <span class="sqh-badge badge-rejected">Rejected</span>
                   {% else %}
-                  <span class="text-muted small">{{ t.agent_note or '—' }}</span>
+                  <span class="sqh-badge badge-pending">Pending</span>
                   {% endif %}
                 </td>
-                <td>
+                <td data-label="Actions">
+                  <input type="hidden" id="tripNote-{{ t.id }}" value="{{ t.agent_note or '' }}">
                   {% if row_status == 'pending' %}
-                  <div class="d-flex gap-1">
+                  <div class="d-flex gap-1 flex-wrap">
                     <button type="button" class="btn btn-sm btn-lime admin-trip-approve-btn" data-trip-id="{{ t.id }}" title="Approve" disabled>
                       <i class="fas fa-check"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-crimson admin-trip-reject-btn" data-trip-id="{{ t.id }}" title="Reject">
                       <i class="fas fa-times"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
-                      <i class="fas fa-user"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
-                      <i class="fas fa-home"></i>
+                    <button type="button" class="btn btn-sm btn-outline-crimson admin-trip-delete-btn" data-trip-id="{{ t.id }}" title="Delete">
+                      <i class="fas fa-trash"></i>
                     </button>
                   </div>
                   {% elif row_status == 'approved' %}
-                  <div class="d-flex gap-1">
+                  <div class="d-flex gap-1 flex-wrap">
                     <button type="button" class="btn btn-sm btn-outline-blue admin-trip-visit-btn" data-trip-id="{{ t.id }}" title="Mark as Visited">
                       <i class="fas fa-map-marked-alt"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
-                      <i class="fas fa-user"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
-                      <i class="fas fa-home"></i>
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="{{ t.id }}" title="View Trip Request">
                       <i class="fas fa-clipboard-list"></i>
@@ -3005,13 +3022,7 @@
                     </button>
                   </div>
                   {% else %}
-                  <div class="d-flex gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-blue open-client-modal-btn" data-client-id="{{ t.client.id if t.client else '' }}" title="View Client Details">
-                      <i class="fas fa-user"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-blue open-property-modal-btn" data-property-id="{{ t.property_id if t.property_id else (t.property_item.id if t.property_item else '') }}" title="View House Details">
-                      <i class="fas fa-home"></i>
-                    </button>
+                  <div class="d-flex gap-1 flex-wrap">
                     <button type="button" class="btn btn-sm btn-outline-lime open-trip-request-btn" data-trip-id="{{ t.id }}" title="View Trip Request">
                       <i class="fas fa-clipboard-list"></i>
                     </button>
@@ -3033,6 +3044,14 @@
           <span class="fw-semibold d-block mb-1">No matching tripping requests found.</span>
           <span class="small">Try changing the search text or status filter.</span>
         </div>
+
+        <!-- Tripping Requests Pagination -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top" id="adminTripsPaginationWrap">
+          <div class="text-muted small" id="adminTripsPaginationInfo">Showing 0 to 0 of 0 entries</div>
+          <nav aria-label="Tripping Requests Pagination">
+            <ul class="pagination pagination-sm sqh-pagination mb-0" id="adminTripsPaginationList"></ul>
+          </nav>
+        </div>
         {% else %}
         <div class="text-center py-5 text-muted mt-5" id="adminTripQueueEmpty">
           <i class="fas fa-calendar-times fa-2x mb-2 d-block" style="color:var(--clr-border);"></i>
@@ -3040,6 +3059,81 @@
           <span class="small">Client tripping requests will appear here.</span>
         </div>
         {% endif %}
+      </div>
+
+      <!-- Export Site Tripping Monitoring Report Settings Modal -->
+      <div class="modal fade sqh-modal" id="adminExportTrippingReportModal" tabindex="-1" aria-labelledby="adminExportTrippingReportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="sqh-modal-header">
+              <div class="d-flex align-items-center gap-2">
+                <i class="fas fa-file-pdf text-white"></i>
+                <span class="sqh-modal-title" id="adminExportTrippingReportModalLabel">Export Tripping Monitoring Report</span>
+              </div>
+              <button type="button" class="sqh-modal-close" data-bs-dismiss="modal" aria-label="Close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body p-4">
+              <p class="text-muted small mb-3">
+                Generate a formal, print-ready Site Tripping Monitoring Report for Annregar Realty with property model breakdown and weekly statistics.
+              </p>
+
+              <!-- Date Coverage Options -->
+              <label class="sqh-form-label fw-bold mb-2"><i class="fas fa-calendar-alt me-1 text-primary"></i>Date Coverage</label>
+              <div class="d-flex flex-column gap-2 mb-3 p-3 bg-light rounded border">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="adminTrReportPeriod" id="adminTrReportPeriodWeek" value="this_week" checked>
+                  <label class="form-check-label fw-semibold" for="adminTrReportPeriodWeek">
+                    This Week <span class="text-muted fw-normal small">(Current Week: Monday to Sunday)</span>
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="adminTrReportPeriod" id="adminTrReportPeriodToday" value="today">
+                  <label class="form-check-label fw-semibold" for="adminTrReportPeriodToday">
+                    Today Only
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="adminTrReportPeriod" id="adminTrReportPeriodCustom" value="custom">
+                  <label class="form-check-label fw-semibold" for="adminTrReportPeriodCustom">
+                    Custom Date Range
+                  </label>
+                </div>
+
+                <!-- Custom Date Range Inputs -->
+                <div class="row g-2 mt-1 d-none" id="adminTrReportCustomDates">
+                  <div class="col-6">
+                    <label class="form-label small text-muted mb-1">Date From</label>
+                    <input type="date" id="adminTrReportStartDate" class="form-control form-control-sm">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label small text-muted mb-1">Date To</label>
+                    <input type="date" id="adminTrReportEndDate" class="form-control form-control-sm">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Property Filter Dropdown -->
+              <div class="mb-2">
+                <label class="sqh-form-label fw-bold mb-1"><i class="fas fa-home me-1 text-primary"></i>Property Filter</label>
+                <select id="adminTrReportProperty" class="form-select sqh-form-control">
+                  <option value="all">All Properties (Default)</option>
+                  {% for p in all_properties %}
+                  <option value="{{ p.id }}">{{ p.name }}{% if p.subdivision %} — {{ p.subdivision.name }}{% endif %}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-text small text-muted">Filter report to a specific house model or export all active properties.</div>
+              </div>
+            </div>
+            <div class="modal-footer d-flex justify-content-between p-3 border-top bg-light">
+              <button type="button" class="btn btn-outline-crimson px-3" data-bs-dismiss="modal">
+                <i class="fas fa-times me-1"></i>Cancel
+              </button>
+              <button type="button" class="btn btn-lime px-3" id="adminGenerateTrippingReportBtn">
+                <i class="fas fa-print me-1"></i>Generate &amp; Print Report
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="modal fade" id="adminTripAssignModal" tabindex="-1" aria-hidden="true">
@@ -4230,6 +4324,14 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- Training Data Pagination -->
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top" id="tdPaginationWrap">
+              <div class="text-muted small" id="tdPaginationInfo">Showing 1–20 of {{ all_historical|length }} records</div>
+              <nav aria-label="Training Data Pagination">
+                <ul class="pagination pagination-sm sqh-pagination mb-0" id="tdPaginationList"></ul>
+              </nav>
+            </div>
           </div>
         </div>
 
@@ -4284,6 +4386,14 @@
                   <tr id="tdh-no-results-row" style="display:none;"><td colspan="10" class="text-center text-muted py-5 mt-5"><i class="fas fa-search fa-2x mb-2 d-block" style="color:var(--clr-border);"></i><span class="fw-semibold d-block mb-1">No results found</span><span class="small">Try adjusting your search or filter criteria.</span></td></tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Historical Buyer Records Pagination -->
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3 pt-3 border-top" id="tdhPaginationWrap">
+              <div class="text-muted small" id="tdhPaginationInfo">Showing 1–20 of {{ all_historical_records|length }} records</div>
+              <nav aria-label="Historical Records Pagination">
+                <ul class="pagination pagination-sm sqh-pagination mb-0" id="tdhPaginationList"></ul>
+              </nav>
             </div>
           </div>
         </div>

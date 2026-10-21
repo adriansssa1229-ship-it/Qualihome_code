@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Tripping Monitoring Report - Annregar Realty - {{ now_manila.strftime('%Y%m%d') }}</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* ── Reset & Global Typography ──────────────────────────────── */
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #eef1f5;
+      font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+      color: #1a1a1a;
+      font-size: 8.5pt;
+      line-height: 1.25;
+    }
+
+    /* ── Floating Print / Action Toolbar (Hidden in Print) ──────── */
+    .print-toolbar {
+      position: sticky;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      background: #1e293b;
+      color: #fff;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    }
+    .print-toolbar-title {
+      font-size: 11pt;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .print-toolbar-sub {
+      font-size: 8.5pt;
+      color: #94a3b8;
+    }
+    .print-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 9pt;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      border: none;
+      transition: all 0.15s ease;
+    }
+    .print-btn-primary {
+      background: #8B1A1A;
+      color: #fff;
+    }
+    .print-btn-primary:hover {
+      background: #6b1414;
+    }
+    .print-btn-secondary {
+      background: #334155;
+      color: #e2e8f0;
+    }
+    .print-btn-secondary:hover {
+      background: #475569;
+    }
+
+    /* ── Paper Container ────────────────────────────────────────── */
+    .sheet-wrapper {
+      padding: 24px 12px;
+      display: flex;
+      justify-content: center;
+    }
+    .sheet-page {
+      background: #fff;
+      width: 8.5in;
+      min-height: 11in;
+      padding: 0.4in 0.5in;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+      border-radius: 2px;
+      position: relative;
+    }
+
+    /* ── Document Header ────────────────────────────────────────── */
+    .doc-header {
+      border-bottom: 2px solid #8B1A1A;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .doc-logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .doc-logo-img {
+      height: 52px;
+      width: auto;
+      object-fit: contain;
+    }
+    .doc-company-name {
+      font-size: 13pt;
+      font-weight: 900;
+      color: #8B1A1A;
+      letter-spacing: 0.3px;
+      line-height: 1.15;
+    }
+    .doc-company-sub {
+      font-size: 7.5pt;
+      color: #4b5563;
+      margin-top: 2px;
+    }
+    .doc-meta-right {
+      text-align: right;
+      font-size: 7.8pt;
+      color: #374151;
+      line-height: 1.35;
+    }
+    .doc-badge-pill {
+      display: inline-block;
+      background: rgba(139, 26, 26, 0.1);
+      color: #8B1A1A;
+      font-weight: 700;
+      font-size: 7.5pt;
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid rgba(139, 26, 26, 0.25);
+      margin-top: 3px;
+    }
+
+    /* ── Report Title Banner ────────────────────────────────────── */
+    .report-banner {
+      background: linear-gradient(135deg, #8B1A1A 0%, #6b1414 100%);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 4px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .report-title {
+      font-size: 11pt;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    .report-coverage {
+      font-size: 8.5pt;
+      font-weight: 600;
+      opacity: 0.95;
+    }
+
+    /* ── Summary Statistics Cards ───────────────────────────────── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 2fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .summary-card {
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 6px;
+      padding: 8px 12px;
+    }
+    .summary-card-title {
+      font-size: 7.2pt;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #78716c;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    .summary-card-value {
+      font-size: 14pt;
+      font-weight: 800;
+      color: #1c1917;
+      line-height: 1.1;
+    }
+    .summary-card-desc {
+      font-size: 7.2pt;
+      color: #78716c;
+      margin-top: 2px;
+    }
+    .status-mini-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .status-mini-pill {
+      font-size: 7.8pt;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* ── Grouped Property Table Styles ──────────────────────────── */
+    .property-section {
+      margin-bottom: 18px;
+      page-break-inside: avoid;
+    }
+    .property-section-header {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-left: 4px solid #8B1A1A;
+      padding: 5px 10px;
+      font-weight: 800;
+      font-size: 8.5pt;
+      color: #0f172a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 3px 3px 0 0;
+    }
+    table.report-grid {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #cbd5e1;
+      border-top: none;
+      margin-bottom: 4px;
+    }
+    table.report-grid th {
+      background: #f8fafc;
+      color: #334155;
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      padding: 4px 6px;
+      border: 1px solid #cbd5e1;
+      text-align: left;
+    }
+    table.report-grid td {
+      border: 1px solid #e2e8f0;
+      padding: 4.5px 6px;
+      font-size: 7.8pt;
+      vertical-align: middle;
+    }
+    table.report-grid tr:nth-child(even) {
+      background: #fafaf9;
+    }
+
+    /* ── Status Badges in Print ─────────────────────────────────── */
+    .badge-print {
+      display: inline-block;
+      font-size: 6.8pt;
+      font-weight: 700;
+      padding: 1.5px 5.5px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+    .badge-print-approved {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #3b82f6;
+    }
+    .badge-print-visited {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #10b981;
+    }
+
+    /* ── System Audit Footer ────────────────────────────────────── */
+    .report-audit-footer {
+      border-top: 1px solid #cbd5e1;
+      margin-top: 24px;
+      padding-top: 12px;
+      text-align: center;
+      page-break-inside: avoid;
+    }
+
+    /* ── Print Specific Rules (@media print) ────────────────────── */
+    @media print {
+      body {
+        background: #fff !important;
+        padding: 0 !important;
+      }
+      .print-toolbar {
+        display: none !important;
+      }
+      .sheet-wrapper {
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      .sheet-page {
+        width: 100% !important;
+        min-height: auto !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+      }
+      @page {
+        size: letter portrait;
+        margin: 8mm 8mm 8mm 8mm;
+      }
+      .property-section, .report-audit-footer, .summary-grid {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Floating Print Toolbar -->
+  <div class="print-toolbar">
+    <div class="print-toolbar-title">
+      <i class="fas fa-file-pdf" style="color:#f87171;"></i>
+      <div>
+        <div>ANNREGAR REALTY — SITE TRIPPING MONITORING REPORT</div>
+        <div class="print-toolbar-sub">{{ coverage_label }} &bull; Total: {{ total_trips }} Bookings</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button onclick="window.print();" class="print-btn print-btn-primary">
+        <i class="fas fa-print"></i> Print / Save as PDF
+      </button>
+      <button onclick="window.close();" class="print-btn print-btn-secondary">
+        <i class="fas fa-times"></i> Close
+      </button>
+    </div>
+  </div>
+
+  <div class="sheet-wrapper">
+    <div class="sheet-page">
+
+      <!-- Official Header -->
+      <div class="doc-header">
+        <div class="doc-logo-area">
+          <img src="{{ url_for('static', filename='img/essentials/logo.png') }}" alt="Annregar Realty Logo" class="doc-logo-img">
+          <div>
+            <div class="doc-company-name">ANNREGAR REALTY &amp; DEVELOPMENT CORP.</div>
+            <div class="doc-company-sub">QUALIHOME &bull; Property Pre-Qualification &amp; Site Tripping System</div>
+            <div class="doc-company-sub">Carmona, Cavite, Philippines &bull; Email: annregar.realty@gmail.com</div>
+          </div>
+        </div>
+        <div class="doc-meta-right">
+          <div><strong>Doc Ref:</strong> TRIP-REP-{{ now_manila.strftime('%Y%m%d%H%M') }}</div>
+          <div><strong>Date Exported:</strong> {{ now_manila.strftime('%B %d, %Y') }}</div>
+          <div><strong>Time:</strong> {{ now_manila.strftime('%I:%M %p') }}</div>
+          <div><span class="doc-badge-pill">OFFICIAL REPORT</span></div>
+        </div>
+      </div>
+
+      <!-- Report Title Banner -->
+      <div class="report-banner">
+        <div class="report-title">
+          <i class="fas fa-clipboard-check me-2"></i>SITE TRIPPING MONITORING REPORT
+        </div>
+        <div class="report-coverage">
+          Coverage: <strong>{{ coverage_label }}</strong>
+        </div>
+      </div>
+
+      <!-- Summary Statistics Box -->
+      <div class="summary-grid">
+        <!-- Card 1: Total Trips -->
+        <div class="summary-card">
+          <div class="summary-card-title">Total Bookings</div>
+          <div class="summary-card-value">{{ total_trips }}</div>
+          <div class="summary-card-desc">Scheduled site visits</div>
+        </div>
+
+        <!-- Card 2: Top Requested Model -->
+        <div class="summary-card">
+          <div class="summary-card-title">Most Requested Model</div>
+          <div class="summary-card-value" style="font-size:11pt;color:#8B1A1A;">{{ top_model }}</div>
+          <div class="summary-card-desc">{{ top_model_count }} visit request{{ 's' if top_model_count != 1 else '' }}</div>
+        </div>
+
+        <!-- Card 3: Status Breakdown -->
+        <div class="summary-card">
+          <div class="summary-card-title">Status Breakdown</div>
+          <div class="status-mini-pills">
+            <span class="status-mini-pill badge-print-approved">
+              <i class="fas fa-calendar-check me-1"></i> Approved (Upcoming): <strong>{{ status_counts['approved'] }}</strong>
+            </span>
+            <span class="status-mini-pill badge-print-visited">
+              <i class="fas fa-map-marked-alt me-1"></i> Visited (Accomplished): <strong>{{ status_counts['visited'] }}</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grouped Tables by Property Model -->
+      {% if grouped_trips %}
+        {% for prop_name, grp in grouped_trips.items() %}
+        <div class="property-section">
+          <div class="property-section-header">
+            <div>
+              <i class="fas fa-home me-1" style="color:#8B1A1A;"></i>
+              <strong>{{ prop_name|upper }}</strong>
+              {% if grp.property and grp.property.subdivision %}
+                <span class="text-muted fw-normal"> &mdash; {{ grp.property.subdivision.name }}</span>
+              {% elif grp.property and grp.property.location %}
+                <span class="text-muted fw-normal"> &mdash; {{ grp.property.location }}</span>
+              {% endif %}
+            </div>
+            <div style="font-size:7.5pt;color:#475569;">
+              Total Scheduled: <strong>{{ grp.trips|length }}</strong>
+            </div>
+          </div>
+
+          <table class="report-grid">
+            <thead>
+              <tr>
+                <th style="width: 25px; text-align: center;">#</th>
+                <th style="width: 80px;">Date</th>
+                <th style="width: 70px;">Time Slot</th>
+                <th>Client Name</th>
+                <th>Contact No.</th>
+                <th>Assigned Agent</th>
+                <th style="width: 85px; text-align: center;">Status</th>
+                <th>Admin / Agent Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in grp.trips %}
+              {% set raw_st = (t.status or '')|lower %}
+              <tr>
+                <td style="text-align: center; color: #64748b;">{{ loop.index }}</td>
+                <td style="font-weight: 600;">{{ t.preferred_date.strftime('%b %d, %Y') if t.preferred_date else '—' }}</td>
+                <td>{{ (t.preferred_time|ph_time) if t.preferred_time else '—' }}</td>
+                <td>
+                  <strong>{{ t.client.full_name if t.client else 'Client' }}</strong>
+                </td>
+                <td>{{ t.client.contact_number or (t.client.profile.contact_number if t.client.profile else '') or (t.client.email if t.client else '—') }}</td>
+                <td>
+                  {{ t.property_item.agent.full_name if t.property_item and t.property_item.agent else 'Unassigned' }}
+                </td>
+                <td style="text-align: center;">
+                  {% if raw_st == 'approved' %}
+                    <span class="badge-print badge-print-approved">Approved</span>
+                  {% elif raw_st == 'visited' %}
+                    <span class="badge-print badge-print-visited">Visited</span>
+                  {% else %}
+                    <span class="badge-print badge-print-approved">{{ raw_st|upper }}</span>
+                  {% endif %}
+                </td>
+                <td style="font-size:7.2pt; color:#475569;">
+                  {{ t.agent_note or '—' }}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="text-align:center; padding: 40px 20px; border: 1px dashed #cbd5e1; border-radius: 6px; color: #64748b;">
+          <i class="fas fa-calendar-times fa-2x mb-2 d-block" style="color:#94a3b8;"></i>
+          <strong>No tripping requests found for this period.</strong>
+          <div style="font-size:7.5pt; margin-top: 4px;">Try selecting a different date coverage or property filter in the admin dashboard.</div>
+        </div>
+      {% endif %}
+
+      <!-- System Audit Footer -->
+      <div class="report-audit-footer text-center pt-3 mt-4 border-top">
+        <p class="text-muted small mb-0" style="color:#64748b; font-size:7.5pt; text-align:center;">
+          <i class="fas fa-info-circle me-1"></i> This is a system-generated operational document from QUALIHOME. No signature is required.
+          &bull; Exported by: <strong>{{ admin_user.full_name or 'System Admin' }}</strong> on {{ now_manila.strftime('%B %d, %Y at %I:%M %p') }}
+          &bull; Page 1 of 1
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // Auto-trigger print modal slightly after load for ready PDF saving
+    window.addEventListener('DOMContentLoaded', function () {
+      setTimeout(function () {
+        window.print();
+      }, 500);
+    });
+  </script>
+</body>
+</html>
